@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"math"
 	"os"
 	"strconv"
 	"strings"
@@ -53,6 +54,9 @@ const (
 	TOK_WHILE
 	TOK_BREAK
 	TOK_CONTINUE
+	TOK_FOR
+	TOK_LBRACK
+	TOK_RBRACK
 )
 
 type Token struct {
@@ -168,6 +172,8 @@ func (l *Lexer) Tokenize() []Token {
 				typ = TOK_BREAK
 			case "continue":
 				typ = TOK_CONTINUE
+			case "for":
+				typ = TOK_FOR
 			}
 			l.tokens = append(l.tokens, Token{typ, word, tokLine, tokCol})
 			continue
@@ -256,6 +262,12 @@ func (l *Lexer) Tokenize() []Token {
 		case ';':
 			l.push(TOK_SEMICOLON, ";")
 			l.advancePos(1)
+		case '[':
+			l.push(TOK_LBRACK, "[")
+			l.advancePos(1)
+		case ']':
+			l.push(TOK_RBRACK, "]")
+			l.advancePos(1)
 		case '.':
 			l.push(TOK_DOT, ".")
 			l.advancePos(1)
@@ -316,6 +328,18 @@ func (b *BreakStmt) isASTNode() {}
 
 type ContinueStmt struct{}
 func (c *ContinueStmt) isASTNode() {}
+
+type ForLoop struct { Init ASTNode; Cond ASTNode; Post ASTNode; Body []ASTNode }
+func (f *ForLoop) isASTNode() {}
+
+type ArrayLiteral struct { Elements []ASTNode }
+func (a *ArrayLiteral) isASTNode() {}
+
+type IndexAccess struct { Target ASTNode; Index ASTNode }
+func (i *IndexAccess) isASTNode() {}
+
+type IndexAssign struct { Target ASTNode; Index ASTNode; Value ASTNode }
+func (i *IndexAssign) isASTNode() {}
 
 type FuncDef struct { Name string; Params []string; Body []ASTNode }
 func (f *FuncDef) isASTNode() {}
@@ -402,6 +426,8 @@ func (p *Parser) parseStatement() ASTNode {
 		return p.parseIf()
 	case TOK_WHILE:
 		return p.parseWhile()
+	case TOK_FOR:
+		return p.parseFor()
 	case TOK_BREAK:
 		p.next()
 		return &BreakStmt{}
@@ -422,6 +448,31 @@ func (p *Parser) parseStatement() ASTNode {
 		idx := p.pos + 1
 		for idx < len(p.tokens) && p.tokens[idx].Type == TOK_NEWLINE {
 			idx++
+		}
+
+		if p.isIndexAssign() {
+			var target ASTNode = &Identifier{Name: p.next().Value}
+			for {
+				if p.peek().Type == TOK_LBRACK {
+					p.next()
+					index := p.parseExpr()
+					p.expect(TOK_RBRACK)
+					target = &IndexAccess{Target: target, Index: index}
+				} else if p.peek().Type == TOK_DOT {
+					p.next()
+					field := p.expect(TOK_IDENT).Value
+					target = &FieldAccess{Object: target, Field: field}
+				} else {
+					break
+				}
+			}
+			p.expect(TOK_EQ)
+			val := p.parseExpr()
+			if ia, ok := target.(*IndexAccess); ok {
+				return &IndexAssign{Target: ia.Target, Index: ia.Index, Value: val}
+			}
+			fmt.Fprintf(os.Stderr, "Parser error: invalid assignment target\n")
+			os.Exit(1)
 		}
 		
 		if idx < len(p.tokens) {
@@ -528,6 +579,78 @@ func (p *Parser) parseWhile() ASTNode {
 	return &WhileLoop{Condition: cond, Body: body}
 }
 
+// isIndexAssign reports whether the statement starting at the current
+// identifier is an indexed assignment like a[0] = v or s.f[1] = v.
+func (p *Parser) isIndexAssign() bool {
+	idx := p.pos + 1
+	seenBracket := false
+	for {
+		for idx < len(p.tokens) && p.tokens[idx].Type == TOK_NEWLINE {
+			idx++
+		}
+		if idx >= len(p.tokens) {
+			return false
+		}
+		t := p.tokens[idx].Type
+		if t == TOK_LBRACK {
+			seenBracket = true
+			depth := 0
+			for idx < len(p.tokens) {
+				if p.tokens[idx].Type == TOK_LBRACK {
+					depth++
+				}
+				if p.tokens[idx].Type == TOK_RBRACK {
+					depth--
+					if depth == 0 {
+						idx++
+						break
+					}
+				}
+				idx++
+			}
+			continue
+		}
+		if t == TOK_DOT {
+			idx++
+			for idx < len(p.tokens) && p.tokens[idx].Type == TOK_NEWLINE {
+				idx++
+			}
+			if idx < len(p.tokens) && p.tokens[idx].Type == TOK_IDENT {
+				idx++
+				continue
+			}
+			return false
+		}
+		if t == TOK_EQ {
+			return seenBracket
+		}
+		return false
+	}
+}
+
+func (p *Parser) parseFor() ASTNode {
+	p.expect(TOK_FOR)
+	var init, cond, post ASTNode
+	if p.peek().Type != TOK_SEMICOLON {
+		init = p.parseStatement()
+	}
+	p.expect(TOK_SEMICOLON)
+	if p.peek().Type != TOK_SEMICOLON {
+		cond = p.parseExpr()
+	}
+	p.expect(TOK_SEMICOLON)
+	if p.peek().Type != TOK_LBRACE {
+		post = p.parseStatement()
+	}
+	p.expect(TOK_LBRACE)
+	var body []ASTNode
+	for p.peek().Type != TOK_RBRACE && p.peek().Type != TOK_EOF {
+		body = append(body, p.parseStatement())
+	}
+	p.expect(TOK_RBRACE)
+	return &ForLoop{Init: init, Cond: cond, Post: post, Body: body}
+}
+
 func (p *Parser) parseDelCall() ASTNode {
 	p.expect(TOK_DEL)
 	p.expect(TOK_LPAREN)
@@ -631,8 +754,25 @@ func (p *Parser) parseUnary() ASTNode {
 	node := p.parsePrimary()
 	if ident, ok := node.(*Identifier); ok {
 		if p.peek().Type == TOK_LPAREN {
-			return p.parseFuncCallFinish(ident.Name)
+			node = p.parseFuncCallFinish(ident.Name)
 		}
+	}
+	// постфиксные цепочки: поля и индексы в любом порядке (a[0].hp, f()[1])
+	for {
+		if p.peek().Type == TOK_DOT {
+			p.next()
+			field := p.expect(TOK_IDENT).Value
+			node = &FieldAccess{Object: node, Field: field}
+			continue
+		}
+		if p.peek().Type == TOK_LBRACK {
+			p.next()
+			index := p.parseExpr()
+			p.expect(TOK_RBRACK)
+			node = &IndexAccess{Target: node, Index: index}
+			continue
+		}
+		break
 	}
 	return node
 }
@@ -648,6 +788,18 @@ func (p *Parser) parsePrimary() ASTNode {
 	if tok.Type == TOK_FALSE {
 		p.next()
 		return &BoolLiteral{Value: false}
+	}
+	if tok.Type == TOK_LBRACK {
+		p.next()
+		var elems []ASTNode
+		for p.peek().Type != TOK_RBRACK && p.peek().Type != TOK_EOF {
+			elems = append(elems, p.parseExpr())
+			if p.peek().Type == TOK_COMMA {
+				p.next()
+			}
+		}
+		p.expect(TOK_RBRACK)
+		return &ArrayLiteral{Elements: elems}
 	}
 	if tok.Type == TOK_NUMBER {
 		p.next()
@@ -705,6 +857,7 @@ type Value struct {
 	NumVal   float64
 	BoolVal  bool
 	StrVal   string
+	Items    []Value
 	Fields   map[string]Value
 	TypeName string
 }
@@ -866,6 +1019,34 @@ func (interp *Interpreter) eval(node ASTNode, env *Environment) Value {
 	case *WhileLoop:
 		return interp.evalWhile(n, env)
 
+	case *ForLoop:
+		return interp.evalFor(n, env)
+
+	case *ArrayLiteral:
+		items := make([]Value, 0, len(n.Elements))
+		for _, e := range n.Elements {
+			items = append(items, interp.eval(e, env))
+		}
+		return Value{Kind: "array", Items: items}
+
+	case *IndexAccess:
+		arr := interp.eval(n.Target, env)
+		if arr.Kind != "array" {
+			fmt.Fprintf(os.Stderr, "Runtime error: indexing non-array (%s)\n", arr.Kind)
+			os.Exit(1)
+		}
+		return arr.Items[interp.evalArrayIndex(n.Index, env, len(arr.Items))]
+
+	case *IndexAssign:
+		arr := interp.eval(n.Target, env)
+		if arr.Kind != "array" {
+			fmt.Fprintf(os.Stderr, "Runtime error: indexing non-array (%s)\n", arr.Kind)
+			os.Exit(1)
+		}
+		val := interp.eval(n.Value, env)
+		arr.Items[interp.evalArrayIndex(n.Index, env, len(arr.Items))] = val
+		return val
+
 	case *BreakStmt:
 		panic(&breakSignal{})
 
@@ -967,6 +1148,64 @@ type breakSignal struct{}
 
 type continueSignal struct{}
 
+func (interp *Interpreter) evalFor(node *ForLoop, env *Environment) Value {
+	loopEnv := NewEnvironment(env)
+	defer interp.cleanupLocals(loopEnv)
+	if node.Init != nil {
+		interp.eval(node.Init, loopEnv)
+	}
+	lastVal := Value{Kind: "nil"}
+	for {
+		if node.Cond != nil {
+			if !isTruthy(interp.eval(node.Cond, loopEnv)) {
+				break
+			}
+		}
+		hitBreak := false
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					if _, ok := r.(*breakSignal); ok {
+						hitBreak = true
+						return
+					}
+					// continue: выходим из итерации, post ниже всё равно выполнится
+					if _, ok := r.(*continueSignal); ok {
+						return
+					}
+					panic(r)
+				}
+			}()
+			lastVal = interp.evalBlock(node.Body, loopEnv)
+		}()
+		if hitBreak {
+			break
+		}
+		if node.Post != nil {
+			interp.eval(node.Post, loopEnv)
+		}
+	}
+	return lastVal
+}
+
+func (interp *Interpreter) evalArrayIndex(node ASTNode, env *Environment, length int) int {
+	v := interp.eval(node, env)
+	if v.Kind != "number" {
+		fmt.Fprintf(os.Stderr, "Runtime error: array index must be a number, got %s\n", v.Kind)
+		os.Exit(1)
+	}
+	if v.NumVal != math.Trunc(v.NumVal) {
+		fmt.Fprintf(os.Stderr, "Runtime error: array index must be an integer\n")
+		os.Exit(1)
+	}
+	i := int(v.NumVal)
+	if i < 0 || i >= length {
+		fmt.Fprintf(os.Stderr, "Runtime error: index %d out of range (len %d)\n", i, length)
+		os.Exit(1)
+	}
+	return i
+}
+
 func (interp *Interpreter) evalWhile(node *WhileLoop, env *Environment) Value {
 	lastVal := Value{Kind: "nil"}
 	for isTruthy(interp.eval(node.Condition, env)) {
@@ -1003,6 +1242,50 @@ func (interp *Interpreter) evalFuncCall(call *FuncCall, env *Environment) (resul
 		}
 		fmt.Println()
 		return Value{Kind: "nil"}
+	}
+
+	if call.Name == "len" {
+		if len(call.Args) != 1 {
+			fmt.Fprintf(os.Stderr, "Runtime error: len() takes exactly 1 argument\n")
+			os.Exit(1)
+		}
+		v := interp.eval(call.Args[0], env)
+		switch v.Kind {
+		case "array":
+			return Value{Kind: "number", NumVal: float64(len(v.Items))}
+		case "string":
+			return Value{Kind: "number", NumVal: float64(len([]rune(v.StrVal)))}
+		default:
+			fmt.Fprintf(os.Stderr, "Runtime error: len() of %s\n", v.Kind)
+			os.Exit(1)
+		}
+	}
+
+	if call.Name == "push" {
+		if len(call.Args) != 2 {
+			fmt.Fprintf(os.Stderr, "Runtime error: push() takes exactly 2 arguments\n")
+			os.Exit(1)
+		}
+		target, ok := call.Args[0].(*Identifier)
+		if !ok {
+			fmt.Fprintf(os.Stderr, "Runtime error: push() target must be a variable\n")
+			os.Exit(1)
+		}
+		arr, ok := env.getVar(target.Name)
+		if !ok || arr.Kind != "array" {
+			fmt.Fprintf(os.Stderr, "Runtime error: push() target '%s' is not an array\n", target.Name)
+			os.Exit(1)
+		}
+		arr.Items = append(arr.Items, interp.eval(call.Args[1], env))
+		current := env
+		for current != nil {
+			if _, found := current.vars[target.Name]; found {
+				current.vars[target.Name] = arr
+				break
+			}
+			current = current.parent
+		}
+		return arr
 	}
 
 	fn, ok := env.getFunc(call.Name)
@@ -1166,6 +1449,9 @@ func isTruthy(v Value) bool {
 	if v.Kind == "string" && v.StrVal != "" {
 		return true
 	}
+	if v.Kind == "array" && len(v.Items) > 0 {
+		return true
+	}
 	return false
 }
 
@@ -1180,6 +1466,12 @@ func valueToString(v Value) string {
 		return "false"
 	case "string":
 		return v.StrVal
+	case "array":
+		parts := make([]string, 0, len(v.Items))
+		for _, item := range v.Items {
+			parts = append(parts, valueToString(item))
+		}
+		return "[" + strings.Join(parts, ", ") + "]"
 	case "struct":
 		parts := make([]string, 0)
 		for k, fv := range v.Fields {
