@@ -101,6 +101,9 @@ CodeX is actively evolving with a focus on future full-stack and game developmen
 [x] `for x in arr` iteration, `else if` chains, string helpers
     `upper` / `lower` / `contains` / `split` / `join` (v0.7.0).
 
+[x] File I/O (`read_file` / `write_file` / `append_file` / `exists`)
+    and string escapes `\n \t \r \\ \"` (v0.8.0).
+
 * [ ] Built-in lightweight networking library for backend routing (http_listen).
 
 ## 🔧 Repository Maintenance Commands

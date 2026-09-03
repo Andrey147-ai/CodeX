@@ -126,17 +126,32 @@ func (l *Lexer) Tokenize() []Token {
 		if ch == '"' {
 			tokLine, tokCol := l.line, l.col
 			l.advancePos(1)
-			start := l.pos
-			startCol := tokCol + 1
-			_ = startCol
+			var sb strings.Builder
 			for l.pos < len(l.input) && l.input[l.pos] != '"' {
-				if l.input[l.pos] == '\n' {
-					l.advancePos(1)
+				if l.input[l.pos] == '\\' && l.pos+1 < len(l.input) {
+					nxt := l.input[l.pos+1]
+					switch nxt {
+					case 'n':
+						sb.WriteRune('\n')
+					case 't':
+						sb.WriteRune('\t')
+					case 'r':
+						sb.WriteRune('\r')
+					case '\\':
+						sb.WriteRune('\\')
+					case '"':
+						sb.WriteRune('"')
+					default:
+						sb.WriteRune('\\')
+						sb.WriteRune(nxt)
+					}
+					l.advancePos(2)
 				} else {
+					sb.WriteRune(l.input[l.pos])
 					l.advancePos(1)
 				}
 			}
-			str := string(l.input[start:l.pos])
+			str := sb.String()
 			l.tokens = append(l.tokens, Token{TOK_STRING, str, tokLine, tokCol})
 			if l.pos < len(l.input) {
 				l.advancePos(1)
@@ -1659,6 +1674,67 @@ func (interp *Interpreter) evalFuncCall(call *FuncCall, env *Environment) (resul
 			os.Exit(1)
 		}
 		return Value{Kind: "string", StrVal: string(body)}
+	}
+
+	if call.Name == "read_file" {
+		if len(call.Args) != 1 {
+			fmt.Fprintf(os.Stderr, "Runtime error: read_file() takes exactly 1 argument\n")
+			os.Exit(1)
+		}
+		path := interp.eval(call.Args[0], env)
+		if path.Kind != "string" {
+			fmt.Fprintf(os.Stderr, "Runtime error: read_file() needs a string path, got %s\n", path.Kind)
+			os.Exit(1)
+		}
+		data, err := os.ReadFile(path.StrVal)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Runtime error: read_file() failed: %v\n", err)
+			os.Exit(1)
+		}
+		return Value{Kind: "string", StrVal: string(data)}
+	}
+
+	if call.Name == "write_file" || call.Name == "append_file" {
+		if len(call.Args) != 2 {
+			fmt.Fprintf(os.Stderr, "Runtime error: %s() takes exactly 2 arguments\n", call.Name)
+			os.Exit(1)
+		}
+		path := interp.eval(call.Args[0], env)
+		content := interp.eval(call.Args[1], env)
+		if path.Kind != "string" || content.Kind != "string" {
+			fmt.Fprintf(os.Stderr, "Runtime error: %s() needs (string, string)\n", call.Name)
+			os.Exit(1)
+		}
+		var err error
+		if call.Name == "write_file" {
+			err = os.WriteFile(path.StrVal, []byte(content.StrVal), 0644)
+		} else {
+			var f *os.File
+			f, err = os.OpenFile(path.StrVal, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+			if err == nil {
+				_, err = f.WriteString(content.StrVal)
+				f.Close()
+			}
+		}
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Runtime error: %s() failed: %v\n", call.Name, err)
+			os.Exit(1)
+		}
+		return Value{Kind: "number", NumVal: float64(len(content.StrVal))}
+	}
+
+	if call.Name == "exists" {
+		if len(call.Args) != 1 {
+			fmt.Fprintf(os.Stderr, "Runtime error: exists() takes exactly 1 argument\n")
+			os.Exit(1)
+		}
+		path := interp.eval(call.Args[0], env)
+		if path.Kind != "string" {
+			fmt.Fprintf(os.Stderr, "Runtime error: exists() needs a string path, got %s\n", path.Kind)
+			os.Exit(1)
+		}
+		_, err := os.Stat(path.StrVal)
+		return Value{Kind: "bool", BoolVal: err == nil}
 	}
 
 	fn, ok := env.getFunc(call.Name)
