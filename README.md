@@ -2,7 +2,7 @@
 
 **CodeX** is a lightweight, fast, and completely standalone general-purpose programming language built from scratch in **Go**.
 
-> ⚡ **Fun Fact:** This project is entirely developed and maintained by a 16-year-old independent developer from Kazakhstan (`Andrey147-ai`). The goal of CodeX is to prove that building custom system architecture, lexers, and parsers requires focus and passion rather than degrees or age.
+> ⚡ **Fun Fact:** This project is entirely developed and maintained by a 13-year-old independent developer from Kazakhstan (`Andrey147-ai`). The goal of CodeX is to prove that building custom system architecture, lexers, and parsers requires focus and passion rather than degrees or age.
 
 The core architectural highlight of CodeX is its **hybrid memory management that bypasses heavy Garbage Collection (GC)**. The language combines structural simplicity with an automated scope-based memory cleanup (Scope-based Memory Management) to minimize system overhead.
 
