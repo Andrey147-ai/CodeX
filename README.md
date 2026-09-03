@@ -88,7 +88,9 @@ go build -ldflags="-s -w" -o codex.exe main.go
 ## 🗺️ Roadmap
 CodeX is actively evolving with a focus on future full-stack and game development. Upcoming milestones:
 
-[ ] Implementing loops (for, while) for running proper 2D game loops.
+[x] `while` loops with `break` / `continue` (v0.2.0).
+
+[ ] Classic `for` loops for running proper 2D game loops.
 
 * [ ] Dynamic arrays support ([]Value).
 

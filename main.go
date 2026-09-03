@@ -50,6 +50,9 @@ const (
 	TOK_NOT
 	TOK_TRUE
 	TOK_FALSE
+	TOK_WHILE
+	TOK_BREAK
+	TOK_CONTINUE
 )
 
 type Token struct {
@@ -159,6 +162,12 @@ func (l *Lexer) Tokenize() []Token {
 				typ = TOK_TRUE
 			case "false":
 				typ = TOK_FALSE
+			case "while":
+				typ = TOK_WHILE
+			case "break":
+				typ = TOK_BREAK
+			case "continue":
+				typ = TOK_CONTINUE
 			}
 			l.tokens = append(l.tokens, Token{typ, word, tokLine, tokCol})
 			continue
@@ -299,6 +308,15 @@ func (f *FuncCall) isASTNode() {}
 type IfStatement struct { Condition ASTNode; Body []ASTNode; ElseBranch []ASTNode }
 func (i *IfStatement) isASTNode() {}
 
+type WhileLoop struct { Condition ASTNode; Body []ASTNode }
+func (w *WhileLoop) isASTNode() {}
+
+type BreakStmt struct{}
+func (b *BreakStmt) isASTNode() {}
+
+type ContinueStmt struct{}
+func (c *ContinueStmt) isASTNode() {}
+
 type FuncDef struct { Name string; Params []string; Body []ASTNode }
 func (f *FuncDef) isASTNode() {}
 
@@ -382,6 +400,14 @@ func (p *Parser) parseStatement() ASTNode {
 		return p.parseFuncDef()
 	case TOK_IF:
 		return p.parseIf()
+	case TOK_WHILE:
+		return p.parseWhile()
+	case TOK_BREAK:
+		p.next()
+		return &BreakStmt{}
+	case TOK_CONTINUE:
+		p.next()
+		return &ContinueStmt{}
 	case TOK_RETURN:
 		p.next()
 		return &ReturnStmt{Value: p.parseExpr()}
@@ -487,6 +513,19 @@ func (p *Parser) parseIf() ASTNode {
 		p.expect(TOK_RBRACE)
 	}
 	return &IfStatement{Condition: cond, Body: body, ElseBranch: elseBranch}
+}
+
+func (p *Parser) parseWhile() ASTNode {
+	start := p.expect(TOK_WHILE)
+	_ = start
+	cond := p.parseExpr()
+	p.expect(TOK_LBRACE)
+	var body []ASTNode
+	for p.peek().Type != TOK_RBRACE && p.peek().Type != TOK_EOF {
+		body = append(body, p.parseStatement())
+	}
+	p.expect(TOK_RBRACE)
+	return &WhileLoop{Condition: cond, Body: body}
 }
 
 func (p *Parser) parseDelCall() ASTNode {
@@ -734,7 +773,7 @@ func (interp *Interpreter) eval(node ASTNode, env *Environment) Value {
 		}
 		var lastVal Value
 		for _, stmt := range n.Statements {
-			lastVal = interp.eval(stmt, env)
+			lastVal = interp.evalTopLevel(stmt, env)
 		}
 		return lastVal
 
@@ -824,6 +863,15 @@ func (interp *Interpreter) eval(node ASTNode, env *Environment) Value {
 		}
 		return Value{Kind: "nil"}
 
+	case *WhileLoop:
+		return interp.evalWhile(n, env)
+
+	case *BreakStmt:
+		panic(&breakSignal{})
+
+	case *ContinueStmt:
+		panic(&continueSignal{})
+
 	case *ReturnStmt:
 		val := interp.eval(n.Value, env)
 		panic(&returnValue{val})
@@ -880,18 +928,71 @@ func (interp *Interpreter) eval(node ASTNode, env *Environment) Value {
 	return Value{Kind: "nil"}
 }
 
+func (interp *Interpreter) evalTopLevel(stmt ASTNode, env *Environment) (out Value) {
+	defer func() {
+		if r := recover(); r != nil {
+			switch r.(type) {
+			case *breakSignal:
+				fmt.Fprintf(os.Stderr, "Runtime error: 'break' outside loop\n")
+			case *continueSignal:
+				fmt.Fprintf(os.Stderr, "Runtime error: 'continue' outside loop\n")
+			case *returnValue:
+				fmt.Fprintf(os.Stderr, "Runtime error: 'return' outside function\n")
+			default:
+				panic(r)
+			}
+			os.Exit(1)
+		}
+	}()
+	out = interp.eval(stmt, env)
+	return out
+}
+
 func (interp *Interpreter) evalBlock(stmts []ASTNode, env *Environment) Value {
 	blockEnv := NewEnvironment(env)
-	var lastVal Value
+	// defer: блоковые локали чистятся даже при break/continue/return изнутри
+	defer interp.cleanupLocals(blockEnv)
+	var lastVal Value = Value{Kind: "nil"}
 	for _, stmt := range stmts {
 		lastVal = interp.eval(stmt, blockEnv)
 	}
-	interp.cleanupLocals(blockEnv)
 	return lastVal
 }
 
 type returnValue struct {
 	val Value
+}
+
+type breakSignal struct{}
+
+type continueSignal struct{}
+
+func (interp *Interpreter) evalWhile(node *WhileLoop, env *Environment) Value {
+	lastVal := Value{Kind: "nil"}
+	for isTruthy(interp.eval(node.Condition, env)) {
+		hitBreak := false
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					if _, ok := r.(*breakSignal); ok {
+						hitBreak = true
+						return
+					}
+					// continue: просто прерываем текущую итерацию
+					if _, ok := r.(*continueSignal); ok {
+						return
+					}
+					// return и прочее — пробрасываем выше
+					panic(r)
+				}
+			}()
+			lastVal = interp.evalBlock(node.Body, env)
+		}()
+		if hitBreak {
+			break
+		}
+	}
+	return lastVal
 }
 
 func (interp *Interpreter) evalFuncCall(call *FuncCall, env *Environment) (result Value) {
