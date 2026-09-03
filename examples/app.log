@@ -1,0 +1,12 @@
+2026-09-03 10:01:22 INFO server started on :8080
+2026-09-03 10:02:10 INFO request /api/users 200
+2026-09-03 10:03:44 WARN slow query 1200ms
+2026-09-03 10:05:01 ERROR db connection timeout
+2026-09-03 10:05:02 ERROR db connection timeout
+2026-09-03 10:06:30 INFO request /api/orders 200
+2026-09-03 10:07:11 ERROR file not found: avatar.png
+2026-09-03 10:08:00 WARN memory usage 85%
+2026-09-03 10:09:15 INFO request /api/users 200
+2026-09-03 10:10:02 ERROR db connection timeout
+2026-09-03 10:11:47 INFO backup completed
+2026-09-03 10:12:33 WARN slow query 2100ms

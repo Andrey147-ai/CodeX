@@ -1,0 +1,60 @@
+// Log analyzer: reads app.log, counts levels, ranks unique errors,
+// writes report.txt.
+log := read_file("app.log")
+lines := split(log, "\n")
+
+total := 0
+info := 0
+warn := 0
+err := 0
+msgs := []
+counts := []
+
+for line in lines {
+    if len(line) == 0 {
+        continue
+    }
+    total = total + 1
+    if contains(line, "ERROR") {
+        err = err + 1
+        // группируем по тексту без timestamp
+        key := line
+        parts := split(line, "ERROR")
+        if len(parts) > 1 {
+            key = parts[1]
+        }
+        idx := -1
+        for i := 0; i < len(msgs); i = i + 1 {
+            if msgs[i] == key {
+                idx = i
+                break
+            }
+        }
+        if idx == -1 {
+            push(msgs, key)
+            push(counts, 1)
+        } else {
+            counts[idx] = counts[idx] + 1
+        }
+    } else if contains(line, "WARN") {
+        warn = warn + 1
+    } else {
+        info = info + 1
+    }
+}
+
+print("total: ", total)
+print("info: ", info, " warn: ", warn, " error: ", err)
+print("--- unique errors ---")
+for i := 0; i < len(msgs); i = i + 1 {
+    print(counts[i], "x ", msgs[i])
+}
+
+report := "log report\n"
+report = report + "total: " + str(total) + "\n"
+report = report + "info: " + str(info) + " warn: " + str(warn) + " error: " + str(err) + "\n"
+for i := 0; i < len(msgs); i = i + 1 {
+    report = report + str(counts[i]) + "x " + msgs[i] + "\n"
+}
+write_file("report.txt", report)
+print("report saved: ", exists("report.txt"))
