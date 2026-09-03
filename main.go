@@ -61,6 +61,7 @@ const (
 	TOK_FOR
 	TOK_LBRACK
 	TOK_RBRACK
+	TOK_IN
 )
 
 type Token struct {
@@ -178,6 +179,8 @@ func (l *Lexer) Tokenize() []Token {
 				typ = TOK_CONTINUE
 			case "for":
 				typ = TOK_FOR
+			case "in":
+				typ = TOK_IN
 			}
 			l.tokens = append(l.tokens, Token{typ, word, tokLine, tokCol})
 			continue
@@ -410,6 +413,14 @@ type MethodCall struct {
 }
 
 func (m *MethodCall) isASTNode() {}
+
+type ForIn struct {
+	Var      string
+	Iterable ASTNode
+	Body     []ASTNode
+}
+
+func (f *ForIn) isASTNode() {}
 
 type FuncDef struct {
 	Name     string
@@ -658,11 +669,16 @@ func (p *Parser) parseIf() ASTNode {
 	var elseBranch []ASTNode
 	if p.peek().Type == TOK_ELSE {
 		p.next()
-		p.expect(TOK_LBRACE)
-		for p.peek().Type != TOK_RBRACE && p.peek().Type != TOK_EOF {
-			elseBranch = append(elseBranch, p.parseStatement())
+		// else if — цепочка без вложенного блока
+		if p.peek().Type == TOK_IF {
+			elseBranch = append(elseBranch, p.parseIf())
+		} else {
+			p.expect(TOK_LBRACE)
+			for p.peek().Type != TOK_RBRACE && p.peek().Type != TOK_EOF {
+				elseBranch = append(elseBranch, p.parseStatement())
+			}
+			p.expect(TOK_RBRACE)
 		}
-		p.expect(TOK_RBRACE)
 	}
 	return &IfStatement{Condition: cond, Body: body, ElseBranch: elseBranch}
 }
@@ -731,6 +747,25 @@ func (p *Parser) isIndexAssign() bool {
 
 func (p *Parser) parseFor() ASTNode {
 	p.expect(TOK_FOR)
+	// for x in iterable { ... }
+	if p.peek().Type == TOK_IDENT {
+		save := p.pos
+		p.next()
+		isIn := p.peek().Type == TOK_IN
+		p.pos = save
+		if isIn {
+			varName := p.next().Value
+			p.expect(TOK_IN)
+			iterable := p.parseExpr()
+			p.expect(TOK_LBRACE)
+			var body []ASTNode
+			for p.peek().Type != TOK_RBRACE && p.peek().Type != TOK_EOF {
+				body = append(body, p.parseStatement())
+			}
+			p.expect(TOK_RBRACE)
+			return &ForIn{Var: varName, Iterable: iterable, Body: body}
+		}
+	}
 	var init, cond, post ASTNode
 	if p.peek().Type != TOK_SEMICOLON {
 		init = p.parseStatement()
@@ -1174,6 +1209,9 @@ func (interp *Interpreter) eval(node ASTNode, env *Environment) Value {
 	case *ForLoop:
 		return interp.evalFor(n, env)
 
+	case *ForIn:
+		return interp.evalForIn(n, env)
+
 	case *ArrayLiteral:
 		items := make([]Value, 0, len(n.Elements))
 		for _, e := range n.Elements {
@@ -1340,6 +1378,40 @@ func (interp *Interpreter) evalFor(node *ForLoop, env *Environment) Value {
 	return lastVal
 }
 
+func (interp *Interpreter) evalForIn(node *ForIn, env *Environment) Value {
+	iterable := interp.eval(node.Iterable, env)
+	if iterable.Kind != "array" {
+		fmt.Fprintf(os.Stderr, "Runtime error: for-in needs an array, got %s\n", iterable.Kind)
+		os.Exit(1)
+	}
+	loopEnv := NewEnvironment(env)
+	defer interp.cleanupLocals(loopEnv)
+	lastVal := Value{Kind: "nil"}
+	for _, item := range iterable.Items {
+		loopEnv.setVar(node.Var, item)
+		hitBreak := false
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					if _, ok := r.(*breakSignal); ok {
+						hitBreak = true
+						return
+					}
+					if _, ok := r.(*continueSignal); ok {
+						return
+					}
+					panic(r)
+				}
+			}()
+			lastVal = interp.evalBlock(node.Body, loopEnv)
+		}()
+		if hitBreak {
+			break
+		}
+	}
+	return lastVal
+}
+
 func (interp *Interpreter) evalArrayIndex(node ASTNode, env *Environment, length int) int {
 	v := interp.eval(node, env)
 	if v.Kind != "number" {
@@ -1491,6 +1563,73 @@ func (interp *Interpreter) evalFuncCall(call *FuncCall, env *Environment) (resul
 			os.Exit(1)
 		}
 		return Value{Kind: "string", StrVal: strings.TrimRight(line, "\r\n")}
+	}
+
+	if call.Name == "upper" || call.Name == "lower" {
+		if len(call.Args) != 1 {
+			fmt.Fprintf(os.Stderr, "Runtime error: %s() takes exactly 1 argument\n", call.Name)
+			os.Exit(1)
+		}
+		v := interp.eval(call.Args[0], env)
+		if v.Kind != "string" {
+			fmt.Fprintf(os.Stderr, "Runtime error: %s() needs a string, got %s\n", call.Name, v.Kind)
+			os.Exit(1)
+		}
+		if call.Name == "upper" {
+			return Value{Kind: "string", StrVal: strings.ToUpper(v.StrVal)}
+		}
+		return Value{Kind: "string", StrVal: strings.ToLower(v.StrVal)}
+	}
+
+	if call.Name == "contains" {
+		if len(call.Args) != 2 {
+			fmt.Fprintf(os.Stderr, "Runtime error: contains() takes exactly 2 arguments\n")
+			os.Exit(1)
+		}
+		s := interp.eval(call.Args[0], env)
+		sub := interp.eval(call.Args[1], env)
+		if s.Kind != "string" || sub.Kind != "string" {
+			fmt.Fprintf(os.Stderr, "Runtime error: contains() needs strings\n")
+			os.Exit(1)
+		}
+		return Value{Kind: "bool", BoolVal: strings.Contains(s.StrVal, sub.StrVal)}
+	}
+
+	if call.Name == "split" {
+		if len(call.Args) != 2 {
+			fmt.Fprintf(os.Stderr, "Runtime error: split() takes exactly 2 arguments\n")
+			os.Exit(1)
+		}
+		s := interp.eval(call.Args[0], env)
+		sep := interp.eval(call.Args[1], env)
+		if s.Kind != "string" || sep.Kind != "string" {
+			fmt.Fprintf(os.Stderr, "Runtime error: split() needs strings\n")
+			os.Exit(1)
+		}
+		parts := strings.Split(s.StrVal, sep.StrVal)
+		items := make([]Value, 0, len(parts))
+		for _, part := range parts {
+			items = append(items, Value{Kind: "string", StrVal: part})
+		}
+		return Value{Kind: "array", Items: items}
+	}
+
+	if call.Name == "join" {
+		if len(call.Args) != 2 {
+			fmt.Fprintf(os.Stderr, "Runtime error: join() takes exactly 2 arguments\n")
+			os.Exit(1)
+		}
+		arr := interp.eval(call.Args[0], env)
+		sep := interp.eval(call.Args[1], env)
+		if arr.Kind != "array" || sep.Kind != "string" {
+			fmt.Fprintf(os.Stderr, "Runtime error: join() needs (array, string)\n")
+			os.Exit(1)
+		}
+		parts := make([]string, 0, len(arr.Items))
+		for _, item := range arr.Items {
+			parts = append(parts, valueToString(item))
+		}
+		return Value{Kind: "string", StrVal: strings.Join(parts, sep.StrVal)}
 	}
 
 	if call.Name == "http_get" {

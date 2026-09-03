@@ -98,6 +98,9 @@ CodeX is actively evolving with a focus on future full-stack and game developmen
 
 [x] Standard library: `len` / `push` / `str` / `num` / `input` / `http_get` (v0.6.0).
 
+[x] `for x in arr` iteration, `else if` chains, string helpers
+    `upper` / `lower` / `contains` / `split` / `join` (v0.7.0).
+
 * [ ] Built-in lightweight networking library for backend routing (http_listen).
 
 ## 🔧 Repository Maintenance Commands
