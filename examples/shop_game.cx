@@ -22,6 +22,27 @@ print("=== DUNGEON SHOP ===")
 name := input("your name? ")
 p := Player{name, 100, 100}
 
+// digits-only check so bad input never crashes num()
+fn isNumber(s) {
+    if len(s) == 0 {
+        return false
+    }
+    digits := split("0123456789", "")
+    for ch in split(s, "") {
+        ok := false
+        for d in digits {
+            if ch == d {
+                ok = true
+                break
+            }
+        }
+        if !ok {
+            return false
+        }
+    }
+    return true
+}
+
 shop := ["sword:50", "potion:30", "shield:40"]
 inv := []
 potions := 0
@@ -38,21 +59,25 @@ while true {
     if choice == "0" {
         break
     }
-    idx := num(choice) - 1
-    if idx < 0 || idx >= len(shop) {
-        print("no such item")
+    if !isNumber(choice) {
+        print("numbers only!")
     } else {
-        parts := split(shop[idx], ":")
-        price := num(parts[1])
-        if p.gold < price {
-            print("not enough gold!")
+        idx := num(choice) - 1
+        if idx < 0 || idx >= len(shop) {
+            print("no such item")
         } else {
-            p.gold = p.gold - price
-            push(inv, parts[0])
-            if parts[0] == "potion" {
-                potions = potions + 1
+            parts := split(shop[idx], ":")
+            price := num(parts[1])
+            if p.gold < price {
+                print("not enough gold!")
+            } else {
+                p.gold = p.gold - price
+                push(inv, parts[0])
+                if parts[0] == "potion" {
+                    potions = potions + 1
+                }
+                print("bought ", parts[0])
             }
-            print("bought ", parts[0])
         }
     }
 }
