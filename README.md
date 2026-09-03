@@ -94,7 +94,7 @@ CodeX is actively evolving with a focus on future full-stack and game developmen
 
 [x] Dynamic arrays with indexing, `len()` and `push()` (v0.4.0).
 
-* [ ] Struct methods for complete OOP behavior (e.g., fn (b Boss) attack()).
+[x] Struct methods with receiver mutation: `fn (b Boss) attack()` (v0.5.0).
 
 * [ ] Built-in lightweight networking library for backend routing (http_listen).
 

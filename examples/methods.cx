@@ -1,0 +1,30 @@
+struct Boss {
+    id
+    hp
+    shield
+}
+
+// Methods mutate the receiver: field writes are visible to the caller.
+fn (b Boss) takeDamage(amount) {
+    if b.shield > 0 {
+        b.shield = b.shield - amount
+        if b.shield < 0 {
+            b.hp = b.hp + b.shield
+            b.shield = 0
+        }
+    } else {
+        b.hp = b.hp - amount
+    }
+    return b.hp
+}
+
+fn (b Boss) status() {
+    print("boss ", b.id, " hp=", b.hp, " shield=", b.shield)
+}
+
+b := Boss{777, 1000, 300}
+b.status()
+b.takeDamage(500)
+b.status()
+b.takeDamage(900)
+b.status()

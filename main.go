@@ -341,7 +341,10 @@ func (i *IndexAccess) isASTNode() {}
 type IndexAssign struct { Target ASTNode; Index ASTNode; Value ASTNode }
 func (i *IndexAssign) isASTNode() {}
 
-type FuncDef struct { Name string; Params []string; Body []ASTNode }
+type MethodCall struct { Receiver ASTNode; Method string; Args []ASTNode }
+func (m *MethodCall) isASTNode() {}
+
+type FuncDef struct { Name string; Params []string; Body []ASTNode; RecvName string; RecvType string }
 func (f *FuncDef) isASTNode() {}
 
 type ReturnStmt struct { Value ASTNode }
@@ -525,7 +528,15 @@ func (p *Parser) parseStructDef() ASTNode {
 
 func (p *Parser) parseFuncDef() ASTNode {
 	p.expect(TOK_FN)
-	name := p.expect(TOK_IDENT).Value
+	fn := &FuncDef{}
+	// метод: fn (recv Type) name(params)
+	if p.peek().Type == TOK_LPAREN {
+		p.next()
+		fn.RecvName = p.expect(TOK_IDENT).Value
+		fn.RecvType = p.expect(TOK_IDENT).Value
+		p.expect(TOK_RPAREN)
+	}
+	fn.Name = p.expect(TOK_IDENT).Value
 	p.expect(TOK_LPAREN)
 	var params []string
 	for p.peek().Type != TOK_RPAREN && p.peek().Type != TOK_EOF {
@@ -541,7 +552,9 @@ func (p *Parser) parseFuncDef() ASTNode {
 		body = append(body, p.parseStatement())
 	}
 	p.expect(TOK_RBRACE)
-	return &FuncDef{Name: name, Params: params, Body: body}
+	fn.Params = params
+	fn.Body = body
+	return fn
 }
 
 func (p *Parser) parseIf() ASTNode {
@@ -772,6 +785,24 @@ func (p *Parser) parseUnary() ASTNode {
 			node = &IndexAccess{Target: node, Index: index}
 			continue
 		}
+		// вызов метода: obj.method(args)
+		if p.peek().Type == TOK_LPAREN {
+			if _, ok := node.(*FieldAccess); !ok {
+				break
+			}
+			fa := node.(*FieldAccess)
+			p.next()
+			var args []ASTNode
+			for p.peek().Type != TOK_RPAREN && p.peek().Type != TOK_EOF {
+				args = append(args, p.parseExpr())
+				if p.peek().Type == TOK_COMMA {
+					p.next()
+				}
+			}
+			p.expect(TOK_RPAREN)
+			node = &MethodCall{Receiver: fa.Object, Method: fa.Field, Args: args}
+			continue
+		}
 		break
 	}
 	return node
@@ -863,18 +894,22 @@ type Value struct {
 }
 
 type Environment struct {
-	vars    map[string]Value
-	funcs   map[string]*FuncDef
-	structs map[string]*StructDef
-	parent  *Environment
+	vars      map[string]Value
+	funcs     map[string]*FuncDef
+	structs   map[string]*StructDef
+	methods   map[string]map[string]*FuncDef
+	protected map[string]bool
+	parent    *Environment
 }
 
 func NewEnvironment(parent *Environment) *Environment {
 	return &Environment{
-		vars:    make(map[string]Value),
-		funcs:   make(map[string]*FuncDef),
-		structs: make(map[string]*StructDef),
-		parent:  parent,
+		vars:      make(map[string]Value),
+		funcs:     make(map[string]*FuncDef),
+		structs:   make(map[string]*StructDef),
+		methods:   make(map[string]map[string]*FuncDef),
+		protected: make(map[string]bool),
+		parent:    parent,
 	}
 }
 
@@ -902,6 +937,18 @@ func (env *Environment) getFunc(name string) (*FuncDef, bool) {
 	return nil, false
 }
 
+func (env *Environment) getMethod(typeName, method string) (*FuncDef, bool) {
+	if m, ok := env.methods[typeName]; ok {
+		if fn, ok := m[method]; ok {
+			return fn, true
+		}
+	}
+	if env.parent != nil {
+		return env.parent.getMethod(typeName, method)
+	}
+	return nil, false
+}
+
 type Interpreter struct {
 	globalEnv *Environment
 	currentFn string
@@ -921,7 +968,14 @@ func (interp *Interpreter) eval(node ASTNode, env *Environment) Value {
 			case *StructDef:
 				env.structs[s.Name] = s
 			case *FuncDef:
-				env.funcs[s.Name] = s
+				if s.RecvType != "" {
+					if env.methods[s.RecvType] == nil {
+						env.methods[s.RecvType] = make(map[string]*FuncDef)
+					}
+					env.methods[s.RecvType][s.Name] = s
+				} else {
+					env.funcs[s.Name] = s
+				}
 			}
 		}
 		var lastVal Value
@@ -954,18 +1008,25 @@ func (interp *Interpreter) eval(node ASTNode, env *Environment) Value {
 
 	case *FieldAssign:
 		val := interp.eval(n.Value, env)
-		obj, ok := env.getVar(n.Object)
-		if !ok || obj.Kind != "struct" {
-			fmt.Fprintf(os.Stderr, "Runtime error: variable '%s' is not a struct\n", n.Object)
-			os.Exit(1)
+		current := env
+		for current != nil {
+			if obj, ok := current.vars[n.Object]; ok {
+				if obj.Kind != "struct" {
+					fmt.Fprintf(os.Stderr, "Runtime error: variable '%s' is not a struct\n", n.Object)
+					os.Exit(1)
+				}
+				if _, exists := obj.Fields[n.Field]; !exists {
+					fmt.Fprintf(os.Stderr, "Runtime error: struct '%s' has no field '%s'\n", obj.TypeName, n.Field)
+					os.Exit(1)
+				}
+				obj.Fields[n.Field] = val
+				current.vars[n.Object] = obj
+				return val
+			}
+			current = current.parent
 		}
-		if _, exists := obj.Fields[n.Field]; !exists {
-			fmt.Fprintf(os.Stderr, "Runtime error: struct '%s' has no field '%s'\n", obj.TypeName, n.Field)
-			os.Exit(1)
-		}
-		obj.Fields[n.Field] = val
-		env.setVar(n.Object, obj) 
-		return val
+		fmt.Fprintf(os.Stderr, "Runtime error: undefined variable '%s'\n", n.Object)
+		os.Exit(1)
 
 	case *NumberLiteral:
 		return Value{Kind: "number", NumVal: n.Value}
@@ -1006,6 +1067,9 @@ func (interp *Interpreter) eval(node ASTNode, env *Environment) Value {
 
 	case *FuncCall:
 		return interp.evalFuncCall(n, env)
+
+	case *MethodCall:
+		return interp.evalMethodCall(n, env)
 
 	case *IfStatement:
 		cond := interp.eval(n.Condition, env)
@@ -1325,9 +1389,55 @@ func (interp *Interpreter) evalFuncCall(call *FuncCall, env *Environment) (resul
 	return result
 }
 
+func (interp *Interpreter) evalMethodCall(call *MethodCall, env *Environment) (result Value) {
+	recv := interp.eval(call.Receiver, env)
+	if recv.Kind != "struct" {
+		fmt.Fprintf(os.Stderr, "Runtime error: method '%s' called on non-struct (%s)\n", call.Method, recv.Kind)
+		os.Exit(1)
+	}
+	fn, ok := env.getMethod(recv.TypeName, call.Method)
+	if !ok {
+		fmt.Fprintf(os.Stderr, "Runtime error: struct '%s' has no method '%s'\n", recv.TypeName, call.Method)
+		os.Exit(1)
+	}
+
+	fnEnv := NewEnvironment(interp.globalEnv)
+	// receiver делит карту полей с оригиналом: мутации полей видны вызывающему
+	fnEnv.setVar(fn.RecvName, recv)
+	fnEnv.protected[fn.RecvName] = true
+	for i, param := range fn.Params {
+		if i < len(call.Args) {
+			fnEnv.setVar(param, interp.eval(call.Args[i], env))
+		} else {
+			fnEnv.setVar(param, Value{Kind: "nil"})
+		}
+	}
+
+	interp.currentFn = recv.TypeName + "." + call.Method
+
+	defer func() {
+		if r := recover(); r != nil {
+			if rv, ok := r.(*returnValue); ok {
+				interp.cleanupLocals(fnEnv)
+				result = rv.val
+				return
+			}
+			panic(r)
+		}
+	}()
+
+	lastVal := Value{Kind: "nil"}
+	for _, stmt := range fn.Body {
+		lastVal = interp.eval(stmt, fnEnv)
+	}
+	interp.cleanupLocals(fnEnv)
+	result = lastVal
+	return result
+}
+
 func (interp *Interpreter) cleanupLocals(env *Environment) {
 	for name, val := range env.vars {
-		if val.Kind == "struct" && !strings.HasPrefix(name, "_") {
+		if val.Kind == "struct" && !strings.HasPrefix(name, "_") && !env.protected[name] {
 			var current = env
 			var structDef *StructDef
 			var ok bool
