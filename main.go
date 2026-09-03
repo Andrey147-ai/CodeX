@@ -1,11 +1,15 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
+	"io"
 	"math"
+	"net/http"
 	"os"
 	"strconv"
 	"strings"
+	"time"
 	"unicode"
 )
 
@@ -282,84 +286,168 @@ func (l *Lexer) Tokenize() []Token {
 
 // ========== AST ==========
 
-type ASTNode interface { isASTNode() }
+type ASTNode interface{ isASTNode() }
 
-type Program struct { Statements []ASTNode }
+type Program struct{ Statements []ASTNode }
+
 func (p *Program) isASTNode() {}
 
-type VarDecl struct { Name string; Value ASTNode }
+type VarDecl struct {
+	Name  string
+	Value ASTNode
+}
+
 func (v *VarDecl) isASTNode() {}
 
-type Assign struct { Name string; Value ASTNode }
+type Assign struct {
+	Name  string
+	Value ASTNode
+}
+
 func (a *Assign) isASTNode() {}
 
-type FieldAssign struct { Object string; Field string; Value ASTNode }
+type FieldAssign struct {
+	Object string
+	Field  string
+	Value  ASTNode
+}
+
 func (f *FieldAssign) isASTNode() {}
 
-type NumberLiteral struct { Value float64 }
+type NumberLiteral struct{ Value float64 }
+
 func (n *NumberLiteral) isASTNode() {}
 
-type BoolLiteral struct { Value bool }
+type BoolLiteral struct{ Value bool }
+
 func (b *BoolLiteral) isASTNode() {}
 
-type StringLiteral struct { Value string }
+type StringLiteral struct{ Value string }
+
 func (s *StringLiteral) isASTNode() {}
 
-type Identifier struct { Name string }
+type Identifier struct{ Name string }
+
 func (i *Identifier) isASTNode() {}
 
-type BinaryOp struct { Left ASTNode; Op string; Right ASTNode }
+type BinaryOp struct {
+	Left  ASTNode
+	Op    string
+	Right ASTNode
+}
+
 func (b *BinaryOp) isASTNode() {}
 
-type UnaryOp struct { Op string; Expr ASTNode }
+type UnaryOp struct {
+	Op   string
+	Expr ASTNode
+}
+
 func (u *UnaryOp) isASTNode() {}
 
-type FuncCall struct { Name string; Args []ASTNode }
+type FuncCall struct {
+	Name string
+	Args []ASTNode
+}
+
 func (f *FuncCall) isASTNode() {}
 
-type IfStatement struct { Condition ASTNode; Body []ASTNode; ElseBranch []ASTNode }
+type IfStatement struct {
+	Condition  ASTNode
+	Body       []ASTNode
+	ElseBranch []ASTNode
+}
+
 func (i *IfStatement) isASTNode() {}
 
-type WhileLoop struct { Condition ASTNode; Body []ASTNode }
+type WhileLoop struct {
+	Condition ASTNode
+	Body      []ASTNode
+}
+
 func (w *WhileLoop) isASTNode() {}
 
 type BreakStmt struct{}
+
 func (b *BreakStmt) isASTNode() {}
 
 type ContinueStmt struct{}
+
 func (c *ContinueStmt) isASTNode() {}
 
-type ForLoop struct { Init ASTNode; Cond ASTNode; Post ASTNode; Body []ASTNode }
+type ForLoop struct {
+	Init ASTNode
+	Cond ASTNode
+	Post ASTNode
+	Body []ASTNode
+}
+
 func (f *ForLoop) isASTNode() {}
 
-type ArrayLiteral struct { Elements []ASTNode }
+type ArrayLiteral struct{ Elements []ASTNode }
+
 func (a *ArrayLiteral) isASTNode() {}
 
-type IndexAccess struct { Target ASTNode; Index ASTNode }
+type IndexAccess struct {
+	Target ASTNode
+	Index  ASTNode
+}
+
 func (i *IndexAccess) isASTNode() {}
 
-type IndexAssign struct { Target ASTNode; Index ASTNode; Value ASTNode }
+type IndexAssign struct {
+	Target ASTNode
+	Index  ASTNode
+	Value  ASTNode
+}
+
 func (i *IndexAssign) isASTNode() {}
 
-type MethodCall struct { Receiver ASTNode; Method string; Args []ASTNode }
+type MethodCall struct {
+	Receiver ASTNode
+	Method   string
+	Args     []ASTNode
+}
+
 func (m *MethodCall) isASTNode() {}
 
-type FuncDef struct { Name string; Params []string; Body []ASTNode; RecvName string; RecvType string }
+type FuncDef struct {
+	Name     string
+	Params   []string
+	Body     []ASTNode
+	RecvName string
+	RecvType string
+}
+
 func (f *FuncDef) isASTNode() {}
 
-type ReturnStmt struct { Value ASTNode }
+type ReturnStmt struct{ Value ASTNode }
+
 func (r *ReturnStmt) isASTNode() {}
 
-type StructDef struct { Name string; Fields []string }
+type StructDef struct {
+	Name   string
+	Fields []string
+}
+
 func (s *StructDef) isASTNode() {}
 
-type StructLiteral struct { Name string; Values []ASTNode }
+type StructLiteral struct {
+	Name   string
+	Values []ASTNode
+}
+
 func (s *StructLiteral) isASTNode() {}
 
-type FieldAccess struct { Object ASTNode; Field string }
+type FieldAccess struct {
+	Object ASTNode
+	Field  string
+}
+
 func (f *FieldAccess) isASTNode() {}
 
-type DelCall struct { Target ASTNode }
+type DelCall struct{ Target ASTNode }
+
 func (d *DelCall) isASTNode() {}
 
 // ========== PARSER ==========
@@ -477,7 +565,7 @@ func (p *Parser) parseStatement() ASTNode {
 			fmt.Fprintf(os.Stderr, "Parser error: invalid assignment target\n")
 			os.Exit(1)
 		}
-		
+
 		if idx < len(p.tokens) {
 			if p.tokens[idx].Type == TOK_ASSIGN {
 				name := p.next().Value
@@ -491,10 +579,10 @@ func (p *Parser) parseStatement() ASTNode {
 			}
 			if p.tokens[idx].Type == TOK_DOT {
 				if idx+2 < len(p.tokens) && p.tokens[idx+1].Type == TOK_IDENT && p.tokens[idx+2].Type == TOK_EQ {
-					objName := p.next().Value 
-					p.expect(TOK_DOT)         
-					fieldName := p.next().Value 
-					p.expect(TOK_EQ)          
+					objName := p.next().Value
+					p.expect(TOK_DOT)
+					fieldName := p.next().Value
+					p.expect(TOK_EQ)
 					return &FieldAssign{Object: objName, Field: fieldName, Value: p.parseExpr()}
 				}
 			}
@@ -512,10 +600,10 @@ func (p *Parser) parseStructDef() ASTNode {
 	for p.peek().Type != TOK_RBRACE && p.peek().Type != TOK_EOF {
 		fieldName := p.expect(TOK_IDENT).Value
 		fields = append(fields, fieldName)
-		
+
 		if p.peek().Type == TOK_COLON {
-			p.next() 
-			p.expect(TOK_IDENT) 
+			p.next()
+			p.expect(TOK_IDENT)
 		}
 
 		if p.peek().Type == TOK_COMMA {
@@ -843,10 +931,10 @@ func (p *Parser) parsePrimary() ASTNode {
 	}
 	if tok.Type == TOK_IDENT {
 		name := p.next().Value
-		
+
 		// Фикс: Если за идентификатором сразу идёт открывающая скобка — это литерал структуры
 		if p.peek().Type == TOK_LBRACE {
-			p.next() 
+			p.next()
 			var vals []ASTNode
 			for p.peek().Type != TOK_RBRACE && p.peek().Type != TOK_EOF {
 				vals = append(vals, p.parseExpr())
@@ -857,16 +945,16 @@ func (p *Parser) parsePrimary() ASTNode {
 			p.expect(TOK_RBRACE)
 			return &StructLiteral{Name: name, Values: vals}
 		}
-		
+
 		var node ASTNode = &Identifier{Name: name}
-		
+
 		// Фикс: Если за идентификатором идёт точка — это чтение поля структуры прямо внутри математики!
 		for p.peek().Type == TOK_DOT {
 			p.next() // жрём '.'
 			field := p.expect(TOK_IDENT).Value
 			node = &FieldAccess{Object: node, Field: field}
 		}
-		
+
 		return node
 	}
 	if tok.Type == TOK_LPAREN {
@@ -1350,6 +1438,88 @@ func (interp *Interpreter) evalFuncCall(call *FuncCall, env *Environment) (resul
 			current = current.parent
 		}
 		return arr
+	}
+
+	if call.Name == "str" {
+		if len(call.Args) != 1 {
+			fmt.Fprintf(os.Stderr, "Runtime error: str() takes exactly 1 argument\n")
+			os.Exit(1)
+		}
+		return Value{Kind: "string", StrVal: valueToString(interp.eval(call.Args[0], env))}
+	}
+
+	if call.Name == "num" {
+		if len(call.Args) != 1 {
+			fmt.Fprintf(os.Stderr, "Runtime error: num() takes exactly 1 argument\n")
+			os.Exit(1)
+		}
+		v := interp.eval(call.Args[0], env)
+		switch v.Kind {
+		case "number":
+			return v
+		case "bool":
+			if v.BoolVal {
+				return Value{Kind: "number", NumVal: 1}
+			}
+			return Value{Kind: "number", NumVal: 0}
+		case "string":
+			f, err := strconv.ParseFloat(strings.TrimSpace(v.StrVal), 64)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Runtime error: num() cannot convert %q\n", v.StrVal)
+				os.Exit(1)
+			}
+			return Value{Kind: "number", NumVal: f}
+		default:
+			fmt.Fprintf(os.Stderr, "Runtime error: num() of %s\n", v.Kind)
+			os.Exit(1)
+		}
+	}
+
+	if call.Name == "input" {
+		if len(call.Args) > 1 {
+			fmt.Fprintf(os.Stderr, "Runtime error: input() takes at most 1 argument\n")
+			os.Exit(1)
+		}
+		if len(call.Args) == 1 {
+			prompt := interp.eval(call.Args[0], env)
+			fmt.Print(valueToString(prompt))
+		}
+		reader := bufio.NewReader(os.Stdin)
+		line, err := reader.ReadString('\n')
+		if err != nil && err != io.EOF {
+			fmt.Fprintf(os.Stderr, "Runtime error: input() failed: %v\n", err)
+			os.Exit(1)
+		}
+		return Value{Kind: "string", StrVal: strings.TrimRight(line, "\r\n")}
+	}
+
+	if call.Name == "http_get" {
+		if len(call.Args) != 1 {
+			fmt.Fprintf(os.Stderr, "Runtime error: http_get() takes exactly 1 argument\n")
+			os.Exit(1)
+		}
+		url := interp.eval(call.Args[0], env)
+		if url.Kind != "string" {
+			fmt.Fprintf(os.Stderr, "Runtime error: http_get() needs a string URL, got %s\n", url.Kind)
+			os.Exit(1)
+		}
+		client := &http.Client{Timeout: 15 * time.Second}
+		resp, err := client.Get(url.StrVal)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Runtime error: http_get() failed: %v\n", err)
+			os.Exit(1)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+			fmt.Fprintf(os.Stderr, "Runtime error: http_get() status %s\n", resp.Status)
+			os.Exit(1)
+		}
+		body, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Runtime error: http_get() read failed: %v\n", err)
+			os.Exit(1)
+		}
+		return Value{Kind: "string", StrVal: string(body)}
 	}
 
 	fn, ok := env.getFunc(call.Name)

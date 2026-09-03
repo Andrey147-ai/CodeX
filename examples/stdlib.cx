@@ -1,0 +1,12 @@
+// Stdlib demo: input, str/num conversions, len, http_get.
+name := input("your name? ")
+print("hi ", name, "!")
+
+print(str(42) + " is a string now")
+print(num("19") + 3)
+
+prices := [100, 50, 75]
+print("items: ", len(prices))
+
+body := http_get("https://example.com")
+print("fetched bytes: ", len(body))
