@@ -1,0 +1,93 @@
+struct Player {
+    name
+    gold
+    hp
+}
+
+fn (p Player) takeDamage(amount) {
+    p.hp = p.hp - amount
+    return p.hp
+}
+
+fn (p Player) heal(amount) {
+    p.hp = p.hp + amount
+    return p.hp
+}
+
+fn (p Player) status() {
+    print(p.name, " | gold=", p.gold, " hp=", p.hp)
+}
+
+print("=== DUNGEON SHOP ===")
+name := input("your name? ")
+p := Player{name, 100, 100}
+
+shop := ["sword:50", "potion:30", "shield:40"]
+inv := []
+potions := 0
+
+while true {
+    print("--- shop ---")
+    for i := 0; i < len(shop); i = i + 1 {
+        parts := split(shop[i], ":")
+        print(num(str(i)) + 1, ") ", parts[0], " - ", parts[1], " gold")
+    }
+    print("0) leave")
+    p.status()
+    choice := input("buy? ")
+    if choice == "0" {
+        break
+    }
+    idx := num(choice) - 1
+    if idx < 0 || idx >= len(shop) {
+        print("no such item")
+    } else {
+        parts := split(shop[idx], ":")
+        price := num(parts[1])
+        if p.gold < price {
+            print("not enough gold!")
+        } else {
+            p.gold = p.gold - price
+            push(inv, parts[0])
+            if parts[0] == "potion" {
+                potions = potions + 1
+            }
+            print("bought ", parts[0])
+        }
+    }
+}
+
+print("--- inventory: ", join(inv, ", "))
+dmg := 20
+if contains(join(inv, ","), "sword") {
+    dmg = dmg + 15
+    print("sword equipped! dmg=", dmg)
+}
+
+print("=== BOSS FIGHT ===")
+boss := 120
+round := 0
+while p.hp > 0 && boss > 0 {
+    round = round + 1
+    boss = boss - dmg
+    print("round ", round, " boss hp=", boss)
+    if boss > 0 {
+        p.takeDamage(15)
+        if p.hp < 40 && potions > 0 {
+            p.heal(40)
+            potions = potions - 1
+            print("potion used! hp=", p.hp)
+        }
+    }
+}
+
+if boss <= 0 {
+    print("VICTORY in ", round, " rounds!")
+    p.gold = p.gold + 100
+} else {
+    print("DEFEAT...")
+}
+
+p.status()
+write_file("save.txt", p.name + "|" + str(p.gold) + "|" + str(p.hp))
+print("saved: ", read_file("save.txt"))

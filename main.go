@@ -479,12 +479,21 @@ func (d *DelCall) isASTNode() {}
 // ========== PARSER ==========
 
 type Parser struct {
-	tokens []Token
-	pos    int
+	tokens      []Token
+	pos         int
+	structNames map[string]bool
 }
 
 func NewParser(tokens []Token) *Parser {
-	return &Parser{tokens: tokens, pos: 0}
+	p := &Parser{tokens: tokens, pos: 0, structNames: make(map[string]bool)}
+	// прескан: запоминаем все имена структур, чтобы отличать
+	// литерал Type{...} от блока после выражения (if cond {).
+	for i := 0; i+1 < len(tokens); i++ {
+		if tokens[i].Type == TOK_STRUCT && tokens[i+1].Type == TOK_IDENT {
+			p.structNames[tokens[i+1].Value] = true
+		}
+	}
+	return p
 }
 
 func (p *Parser) skipNewlines() {
@@ -499,6 +508,16 @@ func (p *Parser) peek() Token {
 		return Token{TOK_EOF, "", 0, 0}
 	}
 	return p.tokens[p.pos]
+}
+
+// peekRaw возвращает следующий токен БЕЗ пропуска переводов строк —
+// для постфиксных конструкций, обязанных идти на той же строке
+// (литерал структуры Name{...}, вызов f(...), индекс a[0]).
+func (p *Parser) peekRaw() Token {
+	if p.pos < len(p.tokens) {
+		return p.tokens[p.pos]
+	}
+	return Token{TOK_EOF, "", 0, 0}
 }
 
 func (p *Parser) next() Token {
@@ -904,7 +923,7 @@ func (p *Parser) parseUnary() ASTNode {
 	}
 	node := p.parsePrimary()
 	if ident, ok := node.(*Identifier); ok {
-		if p.peek().Type == TOK_LPAREN {
+		if p.peekRaw().Type == TOK_LPAREN {
 			node = p.parseFuncCallFinish(ident.Name)
 		}
 	}
@@ -916,7 +935,7 @@ func (p *Parser) parseUnary() ASTNode {
 			node = &FieldAccess{Object: node, Field: field}
 			continue
 		}
-		if p.peek().Type == TOK_LBRACK {
+		if p.peekRaw().Type == TOK_LBRACK {
 			p.next()
 			index := p.parseExpr()
 			p.expect(TOK_RBRACK)
@@ -924,7 +943,7 @@ func (p *Parser) parseUnary() ASTNode {
 			continue
 		}
 		// вызов метода: obj.method(args)
-		if p.peek().Type == TOK_LPAREN {
+		if p.peekRaw().Type == TOK_LPAREN {
 			if _, ok := node.(*FieldAccess); !ok {
 				break
 			}
@@ -982,8 +1001,10 @@ func (p *Parser) parsePrimary() ASTNode {
 	if tok.Type == TOK_IDENT {
 		name := p.next().Value
 
-		// Фикс: Если за идентификатором сразу идёт открывающая скобка — это литерал структуры
-		if p.peek().Type == TOK_LBRACE {
+		// Литерал структуры только если Name — известная структура
+		// и '{' на той же строке: иначе `price` перед блоком if/while
+		// съедался бы как тип.
+		if p.structNames[name] && p.peekRaw().Type == TOK_LBRACE {
 			p.next()
 			var vals []ASTNode
 			for p.peek().Type != TOK_RBRACE && p.peek().Type != TOK_EOF {
@@ -1020,6 +1041,10 @@ func (p *Parser) parsePrimary() ASTNode {
 }
 
 // ========== INTERPRETER ==========
+
+// общий stdin-ридер для input(): пересоздание bufio на каждый вызов
+// теряло бы уже забуферизованные данные
+var stdinReader = bufio.NewReader(os.Stdin)
 
 type Value struct {
 	Kind     string
@@ -1571,8 +1596,9 @@ func (interp *Interpreter) evalFuncCall(call *FuncCall, env *Environment) (resul
 			prompt := interp.eval(call.Args[0], env)
 			fmt.Print(valueToString(prompt))
 		}
-		reader := bufio.NewReader(os.Stdin)
-		line, err := reader.ReadString('\n')
+		// общий ридер: новый bufio на каждый вызов выбрасывал бы
+		// уже забуферизованный stdin
+		line, err := stdinReader.ReadString('\n')
 		if err != nil && err != io.EOF {
 			fmt.Fprintf(os.Stderr, "Runtime error: input() failed: %v\n", err)
 			os.Exit(1)
