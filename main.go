@@ -39,141 +39,223 @@ const (
 	TOK_STRUCT
 	TOK_DEL
 	TOK_NEWLINE
+	TOK_EQEQ
+	TOK_NEQ
+	TOK_LT
+	TOK_GT
+	TOK_LTE
+	TOK_GTE
+	TOK_AND
+	TOK_OR
+	TOK_NOT
+	TOK_TRUE
+	TOK_FALSE
 )
 
 type Token struct {
 	Type  TokenType
 	Value string
+	Line  int
+	Col   int
 }
 
 type Lexer struct {
 	input  []rune
 	pos    int
 	tokens []Token
+	line   int
+	col    int
 }
 
 func NewLexer(input string) *Lexer {
-	return &Lexer{input: []rune(input), pos: 0}
+	return &Lexer{input: []rune(input), pos: 0, line: 1, col: 1}
+}
+
+func (l *Lexer) push(tok TokenType, val string) {
+	l.tokens = append(l.tokens, Token{tok, val, l.line, l.col})
+}
+
+func (l *Lexer) advancePos(n int) {
+	for i := 0; i < n; i++ {
+		if l.pos < len(l.input) && l.input[l.pos] == '\n' {
+			l.line++
+			l.col = 1
+		} else {
+			l.col++
+		}
+		l.pos++
+	}
 }
 
 func (l *Lexer) Tokenize() []Token {
+	// пропускаем BOM в начале файла
+	if l.pos < len(l.input) && l.input[l.pos] == '\uFEFF' {
+		l.pos++
+		l.col++
+	}
 	for l.pos < len(l.input) {
 		ch := l.input[l.pos]
 
 		if unicode.IsSpace(ch) {
 			if ch == '\n' {
-				l.tokens = append(l.tokens, Token{TOK_NEWLINE, "\n"})
+				l.push(TOK_NEWLINE, "\n")
 			}
-			l.pos++
+			l.advancePos(1)
 			continue
 		}
 
 		if ch == '/' && l.pos+1 < len(l.input) && l.input[l.pos+1] == '/' {
 			for l.pos < len(l.input) && l.input[l.pos] != '\n' {
-				l.pos++
+				l.advancePos(1)
 			}
 			continue
 		}
 
 		if ch == '"' {
-			l.pos++
+			tokLine, tokCol := l.line, l.col
+			l.advancePos(1)
 			start := l.pos
+			startCol := tokCol + 1
+			_ = startCol
 			for l.pos < len(l.input) && l.input[l.pos] != '"' {
-				l.pos++
+				if l.input[l.pos] == '\n' {
+					l.advancePos(1)
+				} else {
+					l.advancePos(1)
+				}
 			}
 			str := string(l.input[start:l.pos])
-			l.tokens = append(l.tokens, Token{TOK_STRING, str})
-			l.pos++
+			l.tokens = append(l.tokens, Token{TOK_STRING, str, tokLine, tokCol})
+			if l.pos < len(l.input) {
+				l.advancePos(1)
+			}
 			continue
 		}
 
 		if unicode.IsLetter(ch) || ch == '_' {
+			tokLine, tokCol := l.line, l.col
 			start := l.pos
 			for l.pos < len(l.input) && (unicode.IsLetter(l.input[l.pos]) || unicode.IsDigit(l.input[l.pos]) || l.input[l.pos] == '_') {
-				l.pos++
+				l.advancePos(1)
 			}
 			word := string(l.input[start:l.pos])
+			typ := TOK_IDENT
 			switch word {
 			case "if":
-				l.tokens = append(l.tokens, Token{TOK_IF, word})
+				typ = TOK_IF
 			case "else":
-				l.tokens = append(l.tokens, Token{TOK_ELSE, word})
+				typ = TOK_ELSE
 			case "fn":
-				l.tokens = append(l.tokens, Token{TOK_FN, word})
+				typ = TOK_FN
 			case "return":
-				l.tokens = append(l.tokens, Token{TOK_RETURN, word})
+				typ = TOK_RETURN
 			case "print":
-				l.tokens = append(l.tokens, Token{TOK_PRINT, word})
+				typ = TOK_PRINT
 			case "struct":
-				l.tokens = append(l.tokens, Token{TOK_STRUCT, word})
+				typ = TOK_STRUCT
 			case "del":
-				l.tokens = append(l.tokens, Token{TOK_DEL, word})
-			default:
-				l.tokens = append(l.tokens, Token{TOK_IDENT, word})
+				typ = TOK_DEL
+			case "true":
+				typ = TOK_TRUE
+			case "false":
+				typ = TOK_FALSE
 			}
+			l.tokens = append(l.tokens, Token{typ, word, tokLine, tokCol})
 			continue
 		}
 
 		if unicode.IsDigit(ch) {
+			tokLine, tokCol := l.line, l.col
 			start := l.pos
 			for l.pos < len(l.input) && (unicode.IsDigit(l.input[l.pos]) || l.input[l.pos] == '.') {
-				l.pos++
+				l.advancePos(1)
 			}
-			l.tokens = append(l.tokens, Token{TOK_NUMBER, string(l.input[start:l.pos])})
+			l.tokens = append(l.tokens, Token{TOK_NUMBER, string(l.input[start:l.pos]), tokLine, tokCol})
 			continue
+		}
+
+		// двухсимвольные операторы — проверяем первыми
+		if l.pos+1 < len(l.input) {
+			two := string([]rune{ch, l.input[l.pos+1]})
+			var typ TokenType = -1
+			switch two {
+			case ":=":
+				typ = TOK_ASSIGN
+			case "==":
+				typ = TOK_EQEQ
+			case "!=":
+				typ = TOK_NEQ
+			case "<=":
+				typ = TOK_LTE
+			case ">=":
+				typ = TOK_GTE
+			case "&&":
+				typ = TOK_AND
+			case "||":
+				typ = TOK_OR
+			}
+			if typ != -1 {
+				l.push(typ, two)
+				l.advancePos(2)
+				continue
+			}
 		}
 
 		switch ch {
 		case ':':
-			if l.pos+1 < len(l.input) && l.input[l.pos+1] == '=' {
-				l.tokens = append(l.tokens, Token{TOK_ASSIGN, ":="})
-				l.pos += 2
-			} else {
-				l.tokens = append(l.tokens, Token{TOK_COLON, ":"})
-				l.pos++
-			}
+			l.push(TOK_COLON, ":")
+			l.advancePos(1)
 		case '=':
-			l.tokens = append(l.tokens, Token{TOK_EQ, "="})
-			l.pos++
+			l.push(TOK_EQ, "=")
+			l.advancePos(1)
+		case '!':
+			l.push(TOK_NOT, "!")
+			l.advancePos(1)
+		case '<':
+			l.push(TOK_LT, "<")
+			l.advancePos(1)
+		case '>':
+			l.push(TOK_GT, ">")
+			l.advancePos(1)
 		case '+':
-			l.tokens = append(l.tokens, Token{TOK_PLUS, "+"})
-			l.pos++
+			l.push(TOK_PLUS, "+")
+			l.advancePos(1)
 		case '-':
-			l.tokens = append(l.tokens, Token{TOK_MINUS, "-"})
-			l.pos++
+			l.push(TOK_MINUS, "-")
+			l.advancePos(1)
 		case '*':
-			l.tokens = append(l.tokens, Token{TOK_STAR, "*"})
-			l.pos++
+			l.push(TOK_STAR, "*")
+			l.advancePos(1)
 		case '/':
-			l.tokens = append(l.tokens, Token{TOK_SLASH, "/"})
-			l.pos++
+			l.push(TOK_SLASH, "/")
+			l.advancePos(1)
 		case '(':
-			l.tokens = append(l.tokens, Token{TOK_LPAREN, "("})
-			l.pos++
+			l.push(TOK_LPAREN, "(")
+			l.advancePos(1)
 		case ')':
-			l.tokens = append(l.tokens, Token{TOK_RPAREN, ")"})
-			l.pos++
+			l.push(TOK_RPAREN, ")")
+			l.advancePos(1)
 		case '{':
-			l.tokens = append(l.tokens, Token{TOK_LBRACE, "{"})
-			l.pos++
+			l.push(TOK_LBRACE, "{")
+			l.advancePos(1)
 		case '}':
-			l.tokens = append(l.tokens, Token{TOK_RBRACE, "}"})
-			l.pos++
+			l.push(TOK_RBRACE, "}")
+			l.advancePos(1)
 		case ',':
-			l.tokens = append(l.tokens, Token{TOK_COMMA, ","})
-			l.pos++
+			l.push(TOK_COMMA, ",")
+			l.advancePos(1)
 		case ';':
-			l.tokens = append(l.tokens, Token{TOK_SEMICOLON, ";"})
-			l.pos++
+			l.push(TOK_SEMICOLON, ";")
+			l.advancePos(1)
 		case '.':
-			l.tokens = append(l.tokens, Token{TOK_DOT, "."})
-			l.pos++
+			l.push(TOK_DOT, ".")
+			l.advancePos(1)
 		default:
-			fmt.Fprintf(os.Stderr, "Lexer error: unknown character '%c'\n", ch)
+			fmt.Fprintf(os.Stderr, "Lexer error at %d:%d: unknown character '%c'\n", l.line, l.col, ch)
 			os.Exit(1)
 		}
 	}
-	l.tokens = append(l.tokens, Token{TOK_EOF, ""})
+	l.tokens = append(l.tokens, Token{TOK_EOF, "", l.line, l.col})
 	return l.tokens
 }
 
@@ -196,6 +278,9 @@ func (f *FieldAssign) isASTNode() {}
 type NumberLiteral struct { Value float64 }
 func (n *NumberLiteral) isASTNode() {}
 
+type BoolLiteral struct { Value bool }
+func (b *BoolLiteral) isASTNode() {}
+
 type StringLiteral struct { Value string }
 func (s *StringLiteral) isASTNode() {}
 
@@ -204,6 +289,9 @@ func (i *Identifier) isASTNode() {}
 
 type BinaryOp struct { Left ASTNode; Op string; Right ASTNode }
 func (b *BinaryOp) isASTNode() {}
+
+type UnaryOp struct { Op string; Expr ASTNode }
+func (u *UnaryOp) isASTNode() {}
 
 type FuncCall struct { Name string; Args []ASTNode }
 func (f *FuncCall) isASTNode() {}
@@ -249,7 +337,7 @@ func (p *Parser) skipNewlines() {
 func (p *Parser) peek() Token {
 	p.skipNewlines()
 	if p.pos >= len(p.tokens) {
-		return Token{TOK_EOF, ""}
+		return Token{TOK_EOF, "", 0, 0}
 	}
 	return p.tokens[p.pos]
 }
@@ -266,7 +354,7 @@ func (p *Parser) next() Token {
 func (p *Parser) expect(typ TokenType) Token {
 	tok := p.next()
 	if tok.Type != typ {
-		fmt.Fprintf(os.Stderr, "Parser error: expected %v, got %v\n", typ, tok)
+		fmt.Fprintf(os.Stderr, "Parser error at %d:%d: expected %v, got %v (%q)\n", tok.Line, tok.Col, typ, tok.Type, tok.Value)
 		os.Exit(1)
 	}
 	return tok
@@ -423,27 +511,105 @@ func (p *Parser) parseFuncCallFinish(name string) ASTNode {
 }
 
 func (p *Parser) parseExpr() ASTNode {
-	left := p.parsePrimary()
+	return p.parseOr()
+}
 
-	if ident, ok := left.(*Identifier); ok {
+func (p *Parser) parseOr() ASTNode {
+	left := p.parseAnd()
+	for p.peek().Type == TOK_OR {
+		opTok := p.next()
+		right := p.parseAnd()
+		left = &BinaryOp{Left: left, Op: opTok.Value, Right: right}
+	}
+	return left
+}
+
+func (p *Parser) parseAnd() ASTNode {
+	left := p.parseEquality()
+	for p.peek().Type == TOK_AND {
+		opTok := p.next()
+		right := p.parseEquality()
+		left = &BinaryOp{Left: left, Op: opTok.Value, Right: right}
+	}
+	return left
+}
+
+func (p *Parser) parseEquality() ASTNode {
+	left := p.parseComparison()
+	for {
+		t := p.peek().Type
+		if t != TOK_EQEQ && t != TOK_NEQ {
+			break
+		}
+		opTok := p.next()
+		right := p.parseComparison()
+		left = &BinaryOp{Left: left, Op: opTok.Value, Right: right}
+	}
+	return left
+}
+
+func (p *Parser) parseComparison() ASTNode {
+	left := p.parseAdd()
+	for {
+		t := p.peek().Type
+		if t != TOK_LT && t != TOK_GT && t != TOK_LTE && t != TOK_GTE {
+			break
+		}
+		opTok := p.next()
+		right := p.parseAdd()
+		left = &BinaryOp{Left: left, Op: opTok.Value, Right: right}
+	}
+	return left
+}
+
+func (p *Parser) parseAdd() ASTNode {
+	left := p.parseMul()
+	for p.peek().Type == TOK_PLUS || p.peek().Type == TOK_MINUS {
+		opTok := p.next()
+		right := p.parseMul()
+		left = &BinaryOp{Left: left, Op: opTok.Value, Right: right}
+	}
+	return left
+}
+
+func (p *Parser) parseMul() ASTNode {
+	left := p.parseUnary()
+	for p.peek().Type == TOK_STAR || p.peek().Type == TOK_SLASH {
+		opTok := p.next()
+		right := p.parseUnary()
+		left = &BinaryOp{Left: left, Op: opTok.Value, Right: right}
+	}
+	return left
+}
+
+func (p *Parser) parseUnary() ASTNode {
+	t := p.peek().Type
+	if t == TOK_NOT || t == TOK_MINUS {
+		opTok := p.next()
+		expr := p.parseUnary()
+		return &UnaryOp{Op: opTok.Value, Expr: expr}
+	}
+	node := p.parsePrimary()
+	if ident, ok := node.(*Identifier); ok {
 		if p.peek().Type == TOK_LPAREN {
 			return p.parseFuncCallFinish(ident.Name)
 		}
 	}
-
-	for p.peek().Type == TOK_PLUS || p.peek().Type == TOK_MINUS || p.peek().Type == TOK_STAR || p.peek().Type == TOK_SLASH {
-		opTok := p.next()
-		right := p.parsePrimary()
-		left = &BinaryOp{Left: left, Op: opTok.Value, Right: right}
-	}
-
-	return left
+	return node
 }
 
 func (p *Parser) parsePrimary() ASTNode {
 	p.skipNewlines()
 	tok := p.peek()
 
+	if tok.Type == TOK_TRUE {
+		p.next()
+		return &BoolLiteral{Value: true}
+	}
+	if tok.Type == TOK_FALSE {
+		p.next()
+		return &BoolLiteral{Value: false}
+	}
 	if tok.Type == TOK_NUMBER {
 		p.next()
 		val, _ := strconv.ParseFloat(tok.Value, 64)
@@ -488,7 +654,7 @@ func (p *Parser) parsePrimary() ASTNode {
 		return expr
 	}
 
-	fmt.Fprintf(os.Stderr, "Parser error: unexpected token %v\n", tok)
+	fmt.Fprintf(os.Stderr, "Parser error at %d:%d: unexpected token %v (%q)\n", tok.Line, tok.Col, tok.Type, tok.Value)
 	os.Exit(1)
 	return nil
 }
@@ -498,6 +664,7 @@ func (p *Parser) parsePrimary() ASTNode {
 type Value struct {
 	Kind     string
 	NumVal   float64
+	BoolVal  bool
 	StrVal   string
 	Fields   map[string]Value
 	TypeName string
@@ -611,6 +778,9 @@ func (interp *Interpreter) eval(node ASTNode, env *Environment) Value {
 	case *NumberLiteral:
 		return Value{Kind: "number", NumVal: n.Value}
 
+	case *BoolLiteral:
+		return Value{Kind: "bool", BoolVal: n.Value}
+
 	case *StringLiteral:
 		return Value{Kind: "string", StrVal: n.Value}
 
@@ -626,6 +796,22 @@ func (interp *Interpreter) eval(node ASTNode, env *Environment) Value {
 		right := interp.eval(n.Right, env)
 		return interp.evalBinaryOp(left, n.Op, right)
 
+	case *UnaryOp:
+		val := interp.eval(n.Expr, env)
+		switch n.Op {
+		case "!":
+			return Value{Kind: "bool", BoolVal: !isTruthy(val)}
+		case "-":
+			if val.Kind == "number" {
+				return Value{Kind: "number", NumVal: -val.NumVal}
+			}
+			fmt.Fprintf(os.Stderr, "Runtime error: unary - on %s\n", val.Kind)
+			os.Exit(1)
+		default:
+			fmt.Fprintf(os.Stderr, "Runtime error: unknown unary op %s\n", n.Op)
+			os.Exit(1)
+		}
+
 	case *FuncCall:
 		return interp.evalFuncCall(n, env)
 
@@ -640,7 +826,6 @@ func (interp *Interpreter) eval(node ASTNode, env *Environment) Value {
 
 	case *ReturnStmt:
 		val := interp.eval(n.Value, env)
-		interp.cleanupLocals(env)
 		panic(&returnValue{val})
 
 	case *StructDef:
@@ -709,7 +894,7 @@ type returnValue struct {
 	val Value
 }
 
-func (interp *Interpreter) evalFuncCall(call *FuncCall, env *Environment) Value {
+func (interp *Interpreter) evalFuncCall(call *FuncCall, env *Environment) (result Value) {
 	if call.Name == "print" {
 		for _, arg := range call.Args {
 			val := interp.eval(arg, env)
@@ -738,20 +923,22 @@ func (interp *Interpreter) evalFuncCall(call *FuncCall, env *Environment) Value 
 
 	defer func() {
 		if r := recover(); r != nil {
-			if _, ok := r.(*returnValue); ok {
+			if rv, ok := r.(*returnValue); ok {
 				interp.cleanupLocals(fnEnv)
+				result = rv.val
 				return
 			}
 			panic(r)
 		}
 	}()
 
-	var lastVal Value
+	var lastVal Value = Value{Kind: "nil"}
 	for _, stmt := range fn.Body {
 		lastVal = interp.eval(stmt, fnEnv)
 	}
 	interp.cleanupLocals(fnEnv)
-	return lastVal
+	result = lastVal
+	return result
 }
 
 func (interp *Interpreter) cleanupLocals(env *Environment) {
@@ -792,6 +979,21 @@ func (interp *Interpreter) evalDel(del *DelCall, env *Environment) Value {
 }
 
 func (interp *Interpreter) evalBinaryOp(left Value, op string, right Value) Value {
+	// логика с short-circuit семантикой через truthiness
+	if op == "&&" {
+		return Value{Kind: "bool", BoolVal: isTruthy(left) && isTruthy(right)}
+	}
+	if op == "||" {
+		return Value{Kind: "bool", BoolVal: isTruthy(left) || isTruthy(right)}
+	}
+	// равенство работает для number/string/bool/nil
+	if op == "==" || op == "!=" {
+		eq := valuesEqual(left, right)
+		if op == "!=" {
+			eq = !eq
+		}
+		return Value{Kind: "bool", BoolVal: eq}
+	}
 	if left.Kind == "number" && right.Kind == "number" {
 		switch op {
 		case "+":
@@ -806,17 +1008,57 @@ func (interp *Interpreter) evalBinaryOp(left Value, op string, right Value) Valu
 				os.Exit(1)
 			}
 			return Value{Kind: "number", NumVal: left.NumVal / right.NumVal}
+		case "<":
+			return Value{Kind: "bool", BoolVal: left.NumVal < right.NumVal}
+		case ">":
+			return Value{Kind: "bool", BoolVal: left.NumVal > right.NumVal}
+		case "<=":
+			return Value{Kind: "bool", BoolVal: left.NumVal <= right.NumVal}
+		case ">=":
+			return Value{Kind: "bool", BoolVal: left.NumVal >= right.NumVal}
 		}
 	}
-	if left.Kind == "string" && right.Kind == "string" && op == "+" {
-		return Value{Kind: "string", StrVal: left.StrVal + right.StrVal}
+	if left.Kind == "string" && right.Kind == "string" {
+		switch op {
+		case "+":
+			return Value{Kind: "string", StrVal: left.StrVal + right.StrVal}
+		case "<":
+			return Value{Kind: "bool", BoolVal: left.StrVal < right.StrVal}
+		case ">":
+			return Value{Kind: "bool", BoolVal: left.StrVal > right.StrVal}
+		case "<=":
+			return Value{Kind: "bool", BoolVal: left.StrVal <= right.StrVal}
+		case ">=":
+			return Value{Kind: "bool", BoolVal: left.StrVal >= right.StrVal}
+		}
 	}
 	fmt.Fprintf(os.Stderr, "Runtime error: invalid binary op %s on %s and %s\n", op, left.Kind, right.Kind)
 	os.Exit(1)
 	return Value{Kind: "nil"}
 }
 
+func valuesEqual(a, b Value) bool {
+	if a.Kind != b.Kind {
+		return false
+	}
+	switch a.Kind {
+	case "number":
+		return a.NumVal == b.NumVal
+	case "bool":
+		return a.BoolVal == b.BoolVal
+	case "string":
+		return a.StrVal == b.StrVal
+	case "nil":
+		return true
+	default:
+		return false
+	}
+}
+
 func isTruthy(v Value) bool {
+	if v.Kind == "bool" {
+		return v.BoolVal
+	}
 	if v.Kind == "number" && v.NumVal != 0 {
 		return true
 	}
@@ -830,6 +1072,11 @@ func valueToString(v Value) string {
 	switch v.Kind {
 	case "number":
 		return strconv.FormatFloat(v.NumVal, 'f', -1, 64)
+	case "bool":
+		if v.BoolVal {
+			return "true"
+		}
+		return "false"
 	case "string":
 		return v.StrVal
 	case "struct":
