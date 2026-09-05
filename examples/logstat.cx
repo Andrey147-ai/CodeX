@@ -1,60 +1,62 @@
-// Log analyzer: reads app.log, counts levels, ranks unique errors,
-// writes report.txt.
-log := read_file("app.log")
+// Log analyzer: reads a log file (arg or app.log), counts levels,
+// ranks unique errors, writes report.txt.
+file := "app.log"
+if len(args()) > 0 {
+    file = args()[0]
+}
+log := read_file(file)
 lines := split(log, "\n")
 
 total := 0
-info := 0
-warn := 0
-err := 0
-msgs := []
-counts := []
+levels := {}
+errs := {}
 
 for line in lines {
     if len(line) == 0 {
         continue
     }
     total = total + 1
+    lv := "INFO"
     if contains(line, "ERROR") {
-        err = err + 1
-        // группируем по тексту без timestamp
+        lv = "ERROR"
+    } else if contains(line, "WARN") {
+        lv = "WARN"
+    }
+    if has(levels, lv) {
+        levels[lv] = levels[lv] + 1
+    } else {
+        levels[lv] = 1
+    }
+    if lv == "ERROR" {
+        // group by message text without timestamp
         key := line
         parts := split(line, "ERROR")
         if len(parts) > 1 {
             key = parts[1]
         }
-        idx := -1
-        for i := 0; i < len(msgs); i = i + 1 {
-            if msgs[i] == key {
-                idx = i
-                break
-            }
-        }
-        if idx == -1 {
-            push(msgs, key)
-            push(counts, 1)
+        if has(errs, key) {
+            errs[key] = errs[key] + 1
         } else {
-            counts[idx] = counts[idx] + 1
+            errs[key] = 1
         }
-    } else if contains(line, "WARN") {
-        warn = warn + 1
-    } else {
-        info = info + 1
     }
 }
 
+print("file: ", file)
 print("total: ", total)
-print("info: ", info, " warn: ", warn, " error: ", err)
+print("levels: ", levels)
 print("--- unique errors ---")
-for i := 0; i < len(msgs); i = i + 1 {
-    print(counts[i], "x ", msgs[i])
+for k in keys(errs) {
+    print(errs[k], "x ", k)
 }
 
-report := "log report\n"
+report := "log report: " + file + "\n"
 report = report + "total: " + str(total) + "\n"
-report = report + "info: " + str(info) + " warn: " + str(warn) + " error: " + str(err) + "\n"
-for i := 0; i < len(msgs); i = i + 1 {
-    report = report + str(counts[i]) + "x " + msgs[i] + "\n"
+for k in keys(levels) {
+    report = report + k + ": " + str(levels[k]) + "\n"
+}
+for k in keys(errs) {
+    report = report + str(errs[k]) + "x " + k + "\n"
 }
 write_file("report.txt", report)
 print("report saved: ", exists("report.txt"))

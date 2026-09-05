@@ -7,6 +7,7 @@ import (
 	"math"
 	"net/http"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -405,6 +406,13 @@ func (f *ForLoop) isASTNode() {}
 type ArrayLiteral struct{ Elements []ASTNode }
 
 func (a *ArrayLiteral) isASTNode() {}
+
+type MapLiteral struct {
+	Keys   []string
+	Values []ASTNode
+}
+
+func (m *MapLiteral) isASTNode() {}
 
 type IndexAccess struct {
 	Target ASTNode
@@ -989,6 +997,29 @@ func (p *Parser) parsePrimary() ASTNode {
 		p.expect(TOK_RBRACK)
 		return &ArrayLiteral{Elements: elems}
 	}
+	if tok.Type == TOK_LBRACE {
+		p.next()
+		var mapKeys []string
+		var mapVals []ASTNode
+		for p.peek().Type != TOK_RBRACE && p.peek().Type != TOK_EOF {
+			kt := p.peek()
+			var key string
+			if kt.Type == TOK_STRING || kt.Type == TOK_IDENT {
+				key = p.next().Value
+			} else {
+				fmt.Fprintf(os.Stderr, "Parser error at %d:%d: map key must be a string, got %v\n", kt.Line, kt.Col, kt.Type)
+				os.Exit(1)
+			}
+			p.expect(TOK_COLON)
+			mapKeys = append(mapKeys, key)
+			mapVals = append(mapVals, p.parseExpr())
+			if p.peek().Type == TOK_COMMA {
+				p.next()
+			}
+		}
+		p.expect(TOK_RBRACE)
+		return &MapLiteral{Keys: mapKeys, Values: mapVals}
+	}
 	if tok.Type == TOK_NUMBER {
 		p.next()
 		val, _ := strconv.ParseFloat(tok.Value, 64)
@@ -1052,6 +1083,7 @@ type Value struct {
 	BoolVal  bool
 	StrVal   string
 	Items    []Value
+	MapVal   map[string]Value
 	Fields   map[string]Value
 	TypeName string
 }
@@ -1259,22 +1291,43 @@ func (interp *Interpreter) eval(node ASTNode, env *Environment) Value {
 		}
 		return Value{Kind: "array", Items: items}
 
+	case *MapLiteral:
+		m := make(map[string]Value, len(n.Keys))
+		for i, k := range n.Keys {
+			m[k] = interp.eval(n.Values[i], env)
+		}
+		return Value{Kind: "map", MapVal: m}
+
 	case *IndexAccess:
-		arr := interp.eval(n.Target, env)
-		if arr.Kind != "array" {
-			fmt.Fprintf(os.Stderr, "Runtime error: indexing non-array (%s)\n", arr.Kind)
+		cont := interp.eval(n.Target, env)
+		if cont.Kind == "map" {
+			key := interp.evalMapKey(n.Index, env)
+			val, ok := cont.MapVal[key]
+			if !ok {
+				fmt.Fprintf(os.Stderr, "Runtime error: missing key %q\n", key)
+				os.Exit(1)
+			}
+			return val
+		}
+		if cont.Kind != "array" {
+			fmt.Fprintf(os.Stderr, "Runtime error: indexing non-array (%s)\n", cont.Kind)
 			os.Exit(1)
 		}
-		return arr.Items[interp.evalArrayIndex(n.Index, env, len(arr.Items))]
+		return cont.Items[interp.evalArrayIndex(n.Index, env, len(cont.Items))]
 
 	case *IndexAssign:
-		arr := interp.eval(n.Target, env)
-		if arr.Kind != "array" {
-			fmt.Fprintf(os.Stderr, "Runtime error: indexing non-array (%s)\n", arr.Kind)
+		cont := interp.eval(n.Target, env)
+		val := interp.eval(n.Value, env)
+		if cont.Kind == "map" {
+			key := interp.evalMapKey(n.Index, env)
+			cont.MapVal[key] = val
+			return val
+		}
+		if cont.Kind != "array" {
+			fmt.Fprintf(os.Stderr, "Runtime error: indexing non-array (%s)\n", cont.Kind)
 			os.Exit(1)
 		}
-		val := interp.eval(n.Value, env)
-		arr.Items[interp.evalArrayIndex(n.Index, env, len(arr.Items))] = val
+		cont.Items[interp.evalArrayIndex(n.Index, env, len(cont.Items))] = val
 		return val
 
 	case *BreakStmt:
@@ -1452,6 +1505,15 @@ func (interp *Interpreter) evalForIn(node *ForIn, env *Environment) Value {
 	return lastVal
 }
 
+func (interp *Interpreter) evalMapKey(node ASTNode, env *Environment) string {
+	v := interp.eval(node, env)
+	if v.Kind != "string" {
+		fmt.Fprintf(os.Stderr, "Runtime error: map key must be a string, got %s\n", v.Kind)
+		os.Exit(1)
+	}
+	return v.StrVal
+}
+
 func (interp *Interpreter) evalArrayIndex(node ASTNode, env *Environment, length int) int {
 	v := interp.eval(node, env)
 	if v.Kind != "number" {
@@ -1517,6 +1579,8 @@ func (interp *Interpreter) evalFuncCall(call *FuncCall, env *Environment) (resul
 		switch v.Kind {
 		case "array":
 			return Value{Kind: "number", NumVal: float64(len(v.Items))}
+		case "map":
+			return Value{Kind: "number", NumVal: float64(len(v.MapVal))}
 		case "string":
 			return Value{Kind: "number", NumVal: float64(len([]rune(v.StrVal)))}
 		default:
@@ -1671,6 +1735,104 @@ func (interp *Interpreter) evalFuncCall(call *FuncCall, env *Environment) (resul
 			parts = append(parts, valueToString(item))
 		}
 		return Value{Kind: "string", StrVal: strings.Join(parts, sep.StrVal)}
+	}
+
+	if call.Name == "keys" {
+		if len(call.Args) != 1 {
+			fmt.Fprintf(os.Stderr, "Runtime error: keys() takes exactly 1 argument\n")
+			os.Exit(1)
+		}
+		v := interp.eval(call.Args[0], env)
+		if v.Kind != "map" {
+			fmt.Fprintf(os.Stderr, "Runtime error: keys() needs a map, got %s\n", v.Kind)
+			os.Exit(1)
+		}
+		ks := make([]string, 0, len(v.MapVal))
+		for k := range v.MapVal {
+			ks = append(ks, k)
+		}
+		sort.Strings(ks)
+		items := make([]Value, 0, len(ks))
+		for _, k := range ks {
+			items = append(items, Value{Kind: "string", StrVal: k})
+		}
+		return Value{Kind: "array", Items: items}
+	}
+
+	if call.Name == "has" {
+		if len(call.Args) != 2 {
+			fmt.Fprintf(os.Stderr, "Runtime error: has() takes exactly 2 arguments\n")
+			os.Exit(1)
+		}
+		m := interp.eval(call.Args[0], env)
+		k := interp.eval(call.Args[1], env)
+		if m.Kind != "map" || k.Kind != "string" {
+			fmt.Fprintf(os.Stderr, "Runtime error: has() needs (map, string)\n")
+			os.Exit(1)
+		}
+		_, ok := m.MapVal[k.StrVal]
+		return Value{Kind: "bool", BoolVal: ok}
+	}
+
+	if call.Name == "sort" {
+		if len(call.Args) != 1 {
+			fmt.Fprintf(os.Stderr, "Runtime error: sort() takes exactly 1 argument\n")
+			os.Exit(1)
+		}
+		target, ok := call.Args[0].(*Identifier)
+		if !ok {
+			fmt.Fprintf(os.Stderr, "Runtime error: sort() target must be a variable\n")
+			os.Exit(1)
+		}
+		arr, ok := env.getVar(target.Name)
+		if !ok || arr.Kind != "array" {
+			fmt.Fprintf(os.Stderr, "Runtime error: sort() target '%s' is not an array\n", target.Name)
+			os.Exit(1)
+		}
+		if len(arr.Items) > 0 {
+			switch arr.Items[0].Kind {
+			case "number":
+				for _, item := range arr.Items {
+					if item.Kind != "number" {
+						fmt.Fprintf(os.Stderr, "Runtime error: sort() needs uniformly typed array\n")
+						os.Exit(1)
+					}
+				}
+				sort.Slice(arr.Items, func(a, b int) bool { return arr.Items[a].NumVal < arr.Items[b].NumVal })
+			case "string":
+				for _, item := range arr.Items {
+					if item.Kind != "string" {
+						fmt.Fprintf(os.Stderr, "Runtime error: sort() needs uniformly typed array\n")
+						os.Exit(1)
+					}
+				}
+				sort.Slice(arr.Items, func(a, b int) bool { return arr.Items[a].StrVal < arr.Items[b].StrVal })
+			default:
+				fmt.Fprintf(os.Stderr, "Runtime error: sort() supports numbers and strings\n")
+				os.Exit(1)
+			}
+		}
+		current := env
+		for current != nil {
+			if _, found := current.vars[target.Name]; found {
+				current.vars[target.Name] = arr
+				break
+			}
+			current = current.parent
+		}
+		return arr
+	}
+
+	if call.Name == "args" {
+		if len(call.Args) != 0 {
+			fmt.Fprintf(os.Stderr, "Runtime error: args() takes no arguments\n")
+			os.Exit(1)
+		}
+		items := make([]Value, 0, len(os.Args)-2)
+		for _, a := range os.Args[2:] {
+			items = append(items, Value{Kind: "string", StrVal: a})
+		}
+		return Value{Kind: "array", Items: items}
 	}
 
 	if call.Name == "http_get" {
@@ -1973,6 +2135,9 @@ func isTruthy(v Value) bool {
 	if v.Kind == "array" && len(v.Items) > 0 {
 		return true
 	}
+	if v.Kind == "map" && len(v.MapVal) > 0 {
+		return true
+	}
 	return false
 }
 
@@ -1993,6 +2158,17 @@ func valueToString(v Value) string {
 			parts = append(parts, valueToString(item))
 		}
 		return "[" + strings.Join(parts, ", ") + "]"
+	case "map":
+		mapKeys := make([]string, 0, len(v.MapVal))
+		for k := range v.MapVal {
+			mapKeys = append(mapKeys, k)
+		}
+		sort.Strings(mapKeys)
+		parts := make([]string, 0, len(mapKeys))
+		for _, k := range mapKeys {
+			parts = append(parts, k+": "+valueToString(v.MapVal[k]))
+		}
+		return "{" + strings.Join(parts, ", ") + "}"
 	case "struct":
 		parts := make([]string, 0)
 		for k, fv := range v.Fields {

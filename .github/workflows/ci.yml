@@ -33,3 +33,9 @@ jobs:
           ./codex${{ runner.os == 'Windows' && '.exe' || '' }} examples/inventory.cx
           ./codex${{ runner.os == 'Windows' && '.exe' || '' }} examples/methods.cx
           echo "ci-user" | ./codex${{ runner.os == 'Windows' && '.exe' || '' }} examples/stdlib.cx
+
+      - name: Smoke test logstat
+        shell: bash
+        working-directory: examples
+        run: |
+          ../codex${{ runner.os == 'Windows' && '.exe' || '' }} logstat.cx app.log

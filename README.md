@@ -85,6 +85,31 @@ go mod init codex
 # Build an optimized executable without debug bloat
 go build -ldflags="-s -w" -o codex.exe main.go
 ```
+## 📚 Standard Library
+
+| Function | Description | Example |
+|---|---|---|
+| `print(...)` | Print values | `print("hp=", hp)` |
+| `len(x)` | Array / map / string length | `len([1,2])` → `2` |
+| `push(arr, v)` | Append to array | `push(inv, "sword")` |
+| `sort(arr)` | Sort numbers/strings in place | `sort(scores)` |
+| `keys(m)` | Sorted map keys | `keys({"a":1})` → `[a]` |
+| `has(m, k)` | Map key check | `has(cfg, "debug")` |
+| `str(x)` | Any value to string | `str(42)` → `"42"` |
+| `num(x)` | String/bool/number to number | `num("19")+3` → `22` |
+| `input(p)` | Read a line from stdin | `name := input("name? ")` |
+| `args()` | CLI args after the script | `args()[0]` |
+| `upper/lower(s)` | String case | `upper("hi")` → `"HI"` |
+| `contains(s, sub)` | Substring check | `contains(s, "err")` |
+| `split(s, sep)` | Split to array | `split("a,b", ",")` |
+| `join(arr, sep)` | Join array to string | `join(["a"], "-")` |
+| `read_file(p)` | Read whole file | `read_file("app.log")` |
+| `write_file(p, t)` | Overwrite file, returns bytes | `write_file("o.txt", t)` |
+| `append_file(p, t)` | Append to file | `append_file("o.txt", t)` |
+| `exists(p)` | Path check | `exists("o.txt")` |
+| `http_get(url)` | Fetch URL body | `http_get("https://example.com")` |
+| `del(x)` | Manual scope cleanup | `del(b)` |
+
 ## 🗺️ Roadmap
 CodeX is actively evolving with a focus on future full-stack and game development. Upcoming milestones:
 
@@ -103,6 +128,8 @@ CodeX is actively evolving with a focus on future full-stack and game developmen
 
 [x] File I/O (`read_file` / `write_file` / `append_file` / `exists`)
     and string escapes `\n \t \r \\ \"` (v0.8.0).
+
+[x] Dictionaries with `keys()` / `has()`, CLI `args()`, `sort()` (v0.9.0).
 
 * [ ] Built-in lightweight networking library for backend routing (http_listen).
 
