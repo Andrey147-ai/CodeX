@@ -1,8 +1,12 @@
+// Журнал оценок: структуры, методы, массивы, словарь, файлы.
+
+// Структура: ученик с именем и массивом баллов.
 struct Student {
     name
     scores
 }
 
+// Метод: средний балл (сумма через for-in, делённая на количество).
 fn (s Student) avg() {
     total := 0
     for x in s.scores {
@@ -11,6 +15,7 @@ fn (s Student) avg() {
     return total / len(s.scores)
 }
 
+// Функция: перевод среднего балла в буквенную оценку.
 fn grade(a) {
     if a >= 90 {
         return "A"
@@ -23,23 +28,28 @@ fn grade(a) {
     }
 }
 
+// Группа: массив структур (внутри каждой — свой массив баллов).
 group := [Student{"Ann", [90, 85, 95]}, Student{"Bob", [70, 60, 80]}, Student{"Cat", [100, 95, 90]}]
 
+// Словарь-отчёт: имя -> оценка. best/bestAvg — лучший ученик.
 best := ""
 bestAvg := 0
 report := {}
 for s in group {
-    a := s.avg()
-    g := grade(a)
+    a := s.avg()          // вызов метода структуры
+    g := grade(a)         // вызов обычной функции
     print(s.name, " avg=", a, " grade=", g)
-    report[s.name] = g
+    report[s.name] = g    // запись в словарь по ключу
     if a > bestAvg {
         bestAvg = a
         best = s.name
     }
 }
 
+// Итоги: лучший ученик и весь словарь целиком.
 print("best: ", best, " (", bestAvg, ")")
 print(report)
+
+// Сохранение: ключи словаря в строку через запятую -> в файл -> проверка чтением.
 write_file("grades.txt", join(keys(report), ","))
 print("saved: ", read_file("grades.txt"))
