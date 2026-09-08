@@ -1,0 +1,45 @@
+struct Student {
+    name
+    scores
+}
+
+fn (s Student) avg() {
+    total := 0
+    for x in s.scores {
+        total = total + x
+    }
+    return total / len(s.scores)
+}
+
+fn grade(a) {
+    if a >= 90 {
+        return "A"
+    } else if a >= 75 {
+        return "B"
+    } else if a >= 60 {
+        return "C"
+    } else {
+        return "F"
+    }
+}
+
+group := [Student{"Ann", [90, 85, 95]}, Student{"Bob", [70, 60, 80]}, Student{"Cat", [100, 95, 90]}]
+
+best := ""
+bestAvg := 0
+report := {}
+for s in group {
+    a := s.avg()
+    g := grade(a)
+    print(s.name, " avg=", a, " grade=", g)
+    report[s.name] = g
+    if a > bestAvg {
+        bestAvg = a
+        best = s.name
+    }
+}
+
+print("best: ", best, " (", bestAvg, ")")
+print(report)
+write_file("grades.txt", join(keys(report), ","))
+print("saved: ", read_file("grades.txt"))
