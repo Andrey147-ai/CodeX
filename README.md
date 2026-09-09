@@ -110,6 +110,24 @@ go build -ldflags="-s -w" -o codex.exe main.go
 | `http_get(url)` | Fetch URL body | `http_get("https://example.com")` |
 | `del(x)` | Manual scope cleanup | `del(b)` |
 
+## 📦 Packages (GitHub)
+
+No registry, no VSCode — packages come straight from GitHub repos.
+
+```go
+import "./mylib.cx"                            // local file
+import "Andrey147-ai/strutils"                 // latest main, entry main.cx
+import "Andrey147-ai/strutils@v1.2.0"          // pinned tag or branch
+import "Andrey147-ai/strutils/lib/text.cx"     // explicit file in repo
+```
+
+Rules:
+* A package is any public GitHub repo. Entry file: `main.cx`, else `<repo>.cx`, else `lib.cx`.
+* Versions are exact tags/branches after `@`, otherwise the default branch.
+* Downloaded zips are cached in `~/.codex/pkgs`, an imported file runs once.
+* Prefetch without running: `codex get user/repo@ver`.
+* To publish a package, push a repo with `main.cx` — done.
+
 ## 🗺️ Roadmap
 CodeX is actively evolving with a focus on future full-stack and game development. Upcoming milestones:
 
@@ -130,6 +148,8 @@ CodeX is actively evolving with a focus on future full-stack and game developmen
     and string escapes `\n \t \r \\ \"` (v0.8.0).
 
 [x] Dictionaries with `keys()` / `has()`, CLI `args()`, `sort()` (v0.9.0).
+
+[x] GitHub package manager: `import "user/repo@ver"`, `codex get` (v0.10.0).
 
 * [ ] Built-in lightweight networking library for backend routing (http_listen).
 

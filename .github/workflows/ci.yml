@@ -39,3 +39,4 @@ jobs:
         working-directory: examples
         run: |
           ../codex${{ runner.os == 'Windows' && '.exe' || '' }} logstat.cx app.log
+          ../codex${{ runner.os == 'Windows' && '.exe' || '' }} useimport.cx

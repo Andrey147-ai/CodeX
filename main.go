@@ -1,12 +1,16 @@
 package main
 
 import (
+	"archive/zip"
 	"bufio"
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"math"
 	"net/http"
 	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -63,6 +67,7 @@ const (
 	TOK_LBRACK
 	TOK_RBRACK
 	TOK_IN
+	TOK_IMPORT
 )
 
 type Token struct {
@@ -197,6 +202,8 @@ func (l *Lexer) Tokenize() []Token {
 				typ = TOK_FOR
 			case "in":
 				typ = TOK_IN
+			case "import":
+				typ = TOK_IMPORT
 			}
 			l.tokens = append(l.tokens, Token{typ, word, tokLine, tokCol})
 			continue
@@ -445,6 +452,12 @@ type ForIn struct {
 
 func (f *ForIn) isASTNode() {}
 
+type ImportStmt struct {
+	Path string
+}
+
+func (i *ImportStmt) isASTNode() {}
+
 type FuncDef struct {
 	Name     string
 	Params   []string
@@ -572,6 +585,15 @@ func (p *Parser) parseStatement() ASTNode {
 		return p.parseWhile()
 	case TOK_FOR:
 		return p.parseFor()
+	case TOK_IMPORT:
+		p.next()
+		pathTok := p.peek()
+		if pathTok.Type != TOK_STRING {
+			fmt.Fprintf(os.Stderr, "Parser error at %d:%d: import needs a string path\n", pathTok.Line, pathTok.Col)
+			os.Exit(1)
+		}
+		p.next()
+		return &ImportStmt{Path: pathTok.Value}
 	case TOK_BREAK:
 		p.next()
 		return &BreakStmt{}
@@ -1145,13 +1167,18 @@ func (env *Environment) getMethod(typeName, method string) (*FuncDef, bool) {
 }
 
 type Interpreter struct {
-	globalEnv *Environment
-	currentFn string
+	globalEnv   *Environment
+	currentFn   string
+	mainDir     string
+	imported    map[string]bool
+	importFiles []string
+	importStack []string
 }
 
 func NewInterpreter() *Interpreter {
 	return &Interpreter{
 		globalEnv: NewEnvironment(nil),
+		imported:  make(map[string]bool),
 	}
 }
 
@@ -1265,6 +1292,9 @@ func (interp *Interpreter) eval(node ASTNode, env *Environment) Value {
 
 	case *MethodCall:
 		return interp.evalMethodCall(n, env)
+
+	case *ImportStmt:
+		return interp.evalImport(n.Path, env)
 
 	case *IfStatement:
 		cond := interp.eval(n.Condition, env)
@@ -1962,6 +1992,284 @@ func (interp *Interpreter) evalFuncCall(call *FuncCall, env *Environment) (resul
 	return result
 }
 
+// ========== PACKAGES (GitHub) ==========
+//
+// import "user/repo"            -> latest main branch, entry main.cx
+// import "user/repo@v1.2.0"     -> tag or branch v1.2.0
+// import "user/repo/lib/a.cx"   -> explicit file inside the repo
+// import "./local.cx"           -> local file, relative to the importer
+//
+// Packages are zip-downloaded from GitHub into ~/.codex/pkgs and cached.
+// `codex get user/repo@ver` prefetches without running anything.
+// An imported file is evaluated once into the shared global scope.
+
+type pkgSpec struct {
+	user string
+	repo string
+	ver  string
+	file string
+}
+
+func parsePkgSpec(s string) (pkgSpec, bool) {
+	t := strings.TrimSpace(s)
+	t = strings.TrimPrefix(t, "github.com/")
+	if strings.HasPrefix(t, ".") || strings.HasPrefix(t, "/") || !strings.Contains(t, "/") {
+		return pkgSpec{}, false
+	}
+	parts := strings.SplitN(t, "/", 3)
+	if len(parts) < 2 || parts[0] == "" || parts[1] == "" {
+		return pkgSpec{}, false
+	}
+	user := parts[0]
+	repo := parts[1]
+	ver := ""
+	if i := strings.Index(repo, "@"); i >= 0 {
+		ver = repo[i+1:]
+		repo = repo[:i]
+	}
+	file := ""
+	if len(parts) == 3 {
+		file = parts[2]
+	}
+	if repo == "" || strings.Contains(repo, "..") || strings.Contains(user, "..") {
+		return pkgSpec{}, false
+	}
+	return pkgSpec{user: user, repo: repo, ver: ver, file: file}, true
+}
+
+func pkgCacheRoot() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, ".codex", "pkgs", "github.com"), nil
+}
+
+func githubAPIDefaultBranch(user, repo string) (string, error) {
+	url := "https://api.github.com/repos/" + user + "/" + repo
+	client := &http.Client{Timeout: 15 * time.Second}
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Accept", "application/vnd.github+json")
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		return "", fmt.Errorf("github api: %s for %s/%s", resp.Status, user, repo)
+	}
+	var info struct {
+		DefaultBranch string `json:"default_branch"`
+	}
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if err != nil {
+		return "", err
+	}
+	if err := json.Unmarshal(body, &info); err != nil {
+		return "", err
+	}
+	if info.DefaultBranch == "" {
+		return "", fmt.Errorf("no default branch for %s/%s", user, repo)
+	}
+	return info.DefaultBranch, nil
+}
+
+func downloadAndUnzip(zipURL, dest string) error {
+	client := &http.Client{Timeout: 60 * time.Second}
+	resp, err := client.Get(zipURL)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		return fmt.Errorf("download: %s", resp.Status)
+	}
+	data, err := io.ReadAll(io.LimitReader(resp.Body, 64<<20))
+	if err != nil {
+		return err
+	}
+	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		return err
+	}
+	for _, f := range zr.File {
+		// strip the top-level user-repo-hash folder
+		rel := f.Name
+		if i := strings.Index(rel, "/"); i >= 0 {
+			rel = rel[i+1:]
+		} else {
+			continue
+		}
+		if rel == "" {
+			continue
+		}
+		target := filepath.Join(dest, filepath.FromSlash(rel))
+		if !strings.HasPrefix(filepath.Clean(target), filepath.Clean(dest)) {
+			return fmt.Errorf("zip slip: %s", f.Name)
+		}
+		if f.FileInfo().IsDir() {
+			if err := os.MkdirAll(target, 0755); err != nil {
+				return err
+			}
+			continue
+		}
+		if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
+			return err
+		}
+		rc, err := f.Open()
+		if err != nil {
+			return err
+		}
+		content, err := io.ReadAll(rc)
+		rc.Close()
+		if err != nil {
+			return err
+		}
+		if err := os.WriteFile(target, content, 0644); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func ensurePackage(spec pkgSpec) (string, error) {
+	root, err := pkgCacheRoot()
+	if err != nil {
+		return "", err
+	}
+	ver := spec.ver
+	if ver == "" {
+		ver = "latest"
+	}
+	dest := filepath.Join(root, spec.user, spec.repo+"@"+ver)
+	if _, err := os.Stat(filepath.Join(dest, ".ok")); err == nil {
+		return dest, nil
+	}
+	var zipURL string
+	if spec.ver == "" {
+		branch, err := githubAPIDefaultBranch(spec.user, spec.repo)
+		if err != nil {
+			return "", err
+		}
+		zipURL = "https://codeload.github.com/" + spec.user + "/" + spec.repo + "/zip/refs/heads/" + branch
+	} else {
+		zipURL = "https://codeload.github.com/" + spec.user + "/" + spec.repo + "/zip/refs/tags/" + spec.ver
+		if err := os.MkdirAll(dest, 0755); err != nil {
+			return "", err
+		}
+		if err := downloadAndUnzip(zipURL, dest); err != nil {
+			// fall back to branch with the same name
+			os.RemoveAll(dest)
+			if err := os.MkdirAll(dest, 0755); err != nil {
+				return "", err
+			}
+			zipURL = "https://codeload.github.com/" + spec.user + "/" + spec.repo + "/zip/refs/heads/" + spec.ver
+			if err := downloadAndUnzip(zipURL, dest); err != nil {
+				os.RemoveAll(dest)
+				return "", fmt.Errorf("no tag or branch %q in %s/%s", spec.ver, spec.user, spec.repo)
+			}
+		}
+		if err := os.WriteFile(filepath.Join(dest, ".ok"), []byte(spec.ver), 0644); err != nil {
+			return "", err
+		}
+		return dest, nil
+	}
+	if err := os.MkdirAll(dest, 0755); err != nil {
+		return "", err
+	}
+	if err := downloadAndUnzip(zipURL, dest); err != nil {
+		os.RemoveAll(dest)
+		return "", err
+	}
+	if err := os.WriteFile(filepath.Join(dest, ".ok"), []byte("latest"), 0644); err != nil {
+		return "", err
+	}
+	return dest, nil
+}
+
+func pkgEntryFile(dest string, spec pkgSpec) (string, error) {
+	if spec.file != "" {
+		p := filepath.Join(dest, filepath.FromSlash(spec.file))
+		if !strings.HasPrefix(filepath.Clean(p), filepath.Clean(dest)) {
+			return "", fmt.Errorf("path escapes package: %s", spec.file)
+		}
+		if !strings.HasSuffix(strings.ToLower(p), ".cx") {
+			return "", fmt.Errorf("package file must end with .cx: %s", spec.file)
+		}
+		if _, err := os.Stat(p); err != nil {
+			return "", fmt.Errorf("no such file %s in %s/%s", spec.file, spec.user, spec.repo)
+		}
+		return p, nil
+	}
+	for _, c := range []string{"main.cx", spec.repo + ".cx", "lib.cx"} {
+		p := filepath.Join(dest, c)
+		if _, err := os.Stat(p); err == nil {
+			return p, nil
+		}
+	}
+	return "", fmt.Errorf("package %s/%s has no entry (add main.cx)", spec.user, spec.repo)
+}
+
+func (interp *Interpreter) evalImport(path string, env *Environment) Value {
+	var abs string
+	if spec, ok := parsePkgSpec(path); ok {
+		dest, err := ensurePackage(spec)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Import error %q: %v\n", path, err)
+			os.Exit(1)
+		}
+		f, err := pkgEntryFile(dest, spec)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Import error %q: %v\n", path, err)
+			os.Exit(1)
+		}
+		abs = f
+	} else {
+		base := interp.mainDir
+		if len(interp.importStack) > 0 {
+			base = interp.importStack[len(interp.importStack)-1]
+		}
+		p := path
+		if !strings.HasSuffix(strings.ToLower(p), ".cx") {
+			p += ".cx"
+		}
+		if !filepath.IsAbs(p) {
+			p = filepath.Join(base, p)
+		}
+		abs = p
+		if _, err := os.Stat(abs); err != nil {
+			fmt.Fprintf(os.Stderr, "Import error: cannot stat %s\n", abs)
+			os.Exit(1)
+		}
+	}
+	abs = filepath.Clean(abs)
+	if interp.imported[abs] {
+		return Value{Kind: "nil"}
+	}
+	for _, f := range interp.importFiles {
+		if f == abs {
+			fmt.Fprintf(os.Stderr, "Import error: cycle detected at %s\n", abs)
+			os.Exit(1)
+		}
+	}
+	data, err := os.ReadFile(abs)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Import error: cannot read %s: %v\n", abs, err)
+		os.Exit(1)
+	}
+	interp.importFiles = append(interp.importFiles, abs)
+	interp.importStack = append(interp.importStack, filepath.Dir(abs))
+	lx := NewLexer(string(data))
+	prog := NewParser(lx.Tokenize()).ParseProgram()
+	interp.eval(prog, interp.globalEnv)
+	interp.importStack = interp.importStack[:len(interp.importStack)-1]
+	interp.imported[abs] = true
+	return Value{Kind: "nil"}
+}
+
 func (interp *Interpreter) evalMethodCall(call *MethodCall, env *Environment) (result Value) {
 	recv := interp.eval(call.Receiver, env)
 	if recv.Kind != "struct" {
@@ -2183,8 +2491,29 @@ func valueToString(v Value) string {
 
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Fprintf(os.Stderr, "Использование: codex <имя_файла.cx>\n")
+		fmt.Fprintf(os.Stderr, "Usage:\n  codex <file.cx> [args...]   run a script\n  codex get <user/repo[@ver]>   prefetch packages\n")
 		os.Exit(1)
+	}
+
+	if os.Args[1] == "get" {
+		if len(os.Args) < 3 {
+			fmt.Fprintf(os.Stderr, "Usage: codex get <user/repo[@ver]> [...]\n")
+			os.Exit(1)
+		}
+		for _, spec := range os.Args[2:] {
+			ps, ok := parsePkgSpec(spec)
+			if !ok {
+				fmt.Fprintf(os.Stderr, "Bad package spec %q (want user/repo[@ver][/path.cx])\n", spec)
+				os.Exit(1)
+			}
+			dest, err := ensurePackage(ps)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Get %q failed: %v\n", spec, err)
+				os.Exit(1)
+			}
+			fmt.Printf("ok %s/%s -> %s\n", ps.user, ps.repo, dest)
+		}
+		return
 	}
 
 	sourceFile := os.Args[1]
@@ -2201,5 +2530,11 @@ func main() {
 	ast := parser.ParseProgram()
 
 	interp := NewInterpreter()
+	abs, err := filepath.Abs(sourceFile)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Ошибка пути %s: %v\n", sourceFile, err)
+		os.Exit(1)
+	}
+	interp.mainDir = filepath.Dir(abs)
 	interp.eval(ast, interp.globalEnv)
 }

@@ -1,0 +1,8 @@
+// Shared helpers: imported by useimport.cx (local file import demo).
+fn double(x) {
+    return x * 2
+}
+
+fn shout(s) {
+    return upper(s) + "!"
+}
