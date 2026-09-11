@@ -1,33 +1,15 @@
-# 🚀 CodeX Programming Language
+# CodeX
 
-**CodeX** is a lightweight, fast, and completely standalone general-purpose programming language built from scratch in **Go**.
+A small programming language written from scratch in Go. One file of
+interpreter, zero dependencies — grab `codex.exe` from
+[Releases](../../releases) and run `.cx` scripts anywhere.
 
-> ⚡ **Fun Fact:** This project is entirely developed and maintained by a 13-year-old independent developer from Kazakhstan (`Andrey147-ai`). The goal of CodeX is to prove that building custom system architecture, lexers, and parsers requires focus and passion rather than degrees or age.
+> I'm Andrey, 16, from Kazakhstan. I started CodeX to figure out how
+> programming languages actually work inside — lexer, parser, runtime,
+> all of it. It's still growing, but it already runs real programs:
+> games, log analyzers, HTTP scripts.
 
-The core architectural highlight of CodeX is its **hybrid memory management that bypasses heavy Garbage Collection (GC)**. The language combines structural simplicity with an automated scope-based memory cleanup (Scope-based Memory Management) to minimize system overhead.
-
----
-
-## 🔥 Key Features
-
-* 📦 **Zero Dependencies:** The compiler bundles the entire runtime into a single executable (`codex.exe`). Users don't need to install Go, C, or Python—it works out of the box.
-* 🧠 **Smart Scope-Based Despawn:** When variables leave their scope (functions, `if` statements), the CodeX runtime automatically wipes the local structures from memory and prints cleanup logs. Manual control is also available via the `del()` construct.
-* ⚡ **Struct Field Math:** Full support for custom objects via the `struct` keyword, with the unique ability to mutate and evaluate object fields directly inside complex mathematical expressions.
-
----
-
-## 🛠️ Architecture Under the Hood
-
-The CodeX interpreter follows classical systems programming principles:
-1. **Lexer (Tokenizer):** Scans raw `.cx` source code and converts it into a stream of tokens (identifiers, numbers, operators).
-2. **Parser:** Builds an Abstract Syntax Tree (**AST**) based on the language grammar rules.
-3. **Interpreter & Environment:** Evaluates AST nodes, isolates variable scopes using custom layered `Environment` states, and tracks the lifecycle of allocations.
-
----
-
-## 💻 Code Example (`main.cx`)
-
-Here is how a raid boss simulation looks in CodeX, featuring dynamic damage calculations and automatic object memory freeing once the logic scope ends:
+## What it looks like
 
 ```go
 struct Boss {
@@ -36,55 +18,89 @@ struct Boss {
     shield
 }
 
-print("=== SYSTEM LOG: Raid Initialization ===")
-print("-> Player entered the boss room")
-
-// Spawning the struct
 b := Boss{777, 1000, 300}
-print("-> Boss spawned! Current shields: ", b.shield)
+print("Boss spawned! Shields: ", b.shield)
 
 damage := 500
-print("-> CRITICAL HIT! Dealing ", damage, " damage")
-
-// Complex math using struct fields directly out of the box!
 b.hp = b.hp + b.shield - damage
 b.shield = 0
 
-if b.hp {
-    print("-> Shields destroyed! Remaining boss HP: ", b.hp)
+if b.hp > 0 {
+    print("Boss survives with HP: ", b.hp)
+}
+```
+
+```
+Boss spawned! Shields: 300
+Boss survives with HP: 800
+```
+
+New here? Start with [Tutorial Part 1: basics](docs/tutorial-01-basics.md) —
+it takes about 15 minutes.
+
+## How it works
+
+Three stages, all in `main.go`:
+
+1. **Lexer** — turns source text into tokens (numbers, strings, operators,
+   keywords). Every token knows its line and column, so errors point at
+   the exact spot: `Lexer error at 2:6`.
+2. **Parser** — builds a syntax tree (AST) with correct operator
+   precedence (`2 + 3 * 4` is `14`). It pre-scans struct names so a block
+   like `if hp > 0 {` is never confused with a struct literal.
+3. **Interpreter** — walks the tree with chained scopes (global →
+   function → block → loop iteration). No garbage collector: when a
+   scope ends, its structs are freed and logged (`[del]`). `return`,
+   `break` and `continue` travel up through panic signals caught at the
+   right level.
+
+## Language tour
+
+```go
+// variables: := creates, = updates
+x := 5
+x = x + 1
+
+// types: numbers, strings, bools, arrays, maps, structs, nil
+a := [10, 20, 30]
+m := {"name": "CodeX", "ver": 11}
+
+// branches and loops
+if x > 10 {
+    print("big")
+} else if x > 5 {
+    print("mid")
+} else {
+    print("small")
 }
 
-print("-> Player won and is leaving the room...")
-// Upon exiting the scope, the CodeX runtime automatically triggers destructors for object 'b'
-```
-## Console Output on Launch:
-```
-=== SYSTEM LOG: Raid Initialization ===
--> Player entered the boss room
--> Boss spawned! Current shields: 300
--> CRITICAL HIT! Dealing 500 damage
--> Shields destroyed! Remaining boss HP: 800
--> Player won and is leaving the room...
-[del] b.id = 777 (freed)
-[del] b.hp = 800 (freed)
-[del] b.shield = 0 (freed)
-=== SYSTEM LOG: Raid completed, server memory is clean ===
-```
-## 🚀 Getting Started
-For Users (Running Scripts)
-Go to the Releases tab on this GitHub repository, download the standalone codex.exe, drop it into your working directory, and run your script via terminal:
-```
-.\codex.exe main.cx
-```
-## For Developers (Building from Source)
-If you want to compile the interpreter engine yourself, make sure you have Go installed:
-```
-# Initialize the module
-go mod init codex
+for i := 0; i < 3; i = i + 1 {
+    print(i)
+}
+for item in a {
+    print(item)
+}
+while x > 0 {
+    x = x - 1
+}
 
-# Build an optimized executable without debug bloat
-go build -ldflags="-s -w" -o codex.exe main.go
+// functions and struct methods (methods mutate the receiver)
+fn add(a, b) {
+    return a + b
+}
+struct Player { name hp }
+fn (p Player) heal(x) {
+    p.hp = p.hp + x
+    return p.hp
+}
+p := Player{"hero", 50}
+p.heal(30)
+
+// packages from GitHub, no registry needed
+import "./mylib.cx"
+import "Andrey147-ai/strutils@v1.2.0"
 ```
+
 ## 📚 Standard Library
 
 | Function | Description | Example |
@@ -108,13 +124,13 @@ go build -ldflags="-s -w" -o codex.exe main.go
 | `append_file(p, t)` | Append to file | `append_file("o.txt", t)` |
 | `exists(p)` | Path check | `exists("o.txt")` |
 | `http_get(url)` | Fetch URL body | `http_get("https://example.com")` |
-| `sleep(ms)` | Frame-accurate pause | `sleep(50)` |
+| `sleep(ms)` | Millisecond pause | `sleep(50)` |
 | `pkgdir(spec)` | Local path of a GitHub repo | `pkgdir("user/data")` |
 | `del(x)` | Manual scope cleanup | `del(b)` |
 
 ## 📦 Packages (GitHub)
 
-No registry, no VSCode — packages come straight from GitHub repos.
+No registry, no editor lock-in — packages come straight from GitHub repos.
 
 ```go
 import "./mylib.cx"                            // local file
@@ -133,44 +149,28 @@ Rules:
   streamed from a frames repo with `sleep()` + ANSI `\e` control).
 * To publish a package, push a repo with `main.cx` — done.
 
+## Examples
+
+In `examples/`: `raid.cx` and `shop_game.cx` (games), `inventory.cx`,
+`logstat.cx` (log analyzer, try `..\codex.exe logstat.cx app.log`),
+`methods.cx`, `stdlib.cx`, `showcase.cx`, `useimport.cx`, `badapple.cx`.
+
+## Building from source
+
+You need Go installed:
+
+```
+go build -ldflags="-s -w" -o codex.exe .
+```
+
+Tests and style: `go vet ./...` must pass, and every push is checked by
+GitHub Actions on Ubuntu + Windows.
+
 ## 🗺️ Roadmap
-CodeX is actively evolving with a focus on future full-stack and game development. Upcoming milestones:
 
-[x] `while` loops with `break` / `continue` (v0.3.0).
+Done so far — comparisons and logic, correct precedence, `while` /
+`for` / `for-in` with `break` / `continue`, arrays, dictionaries,
+struct methods, files, HTTP, packages, terminal control. Up next:
 
-[x] Classic `for` loops (v0.4.0).
-
-[x] Dynamic arrays with indexing, `len()` and `push()` (v0.4.0).
-
-[x] Struct methods with receiver mutation: `fn (b Boss) attack()` (v0.5.0).
-
-[x] Standard library: `len` / `push` / `str` / `num` / `input` / `http_get` (v0.6.0).
-
-[x] `for x in arr` iteration, `else if` chains, string helpers
-    `upper` / `lower` / `contains` / `split` / `join` (v0.7.0).
-
-[x] File I/O (`read_file` / `write_file` / `append_file` / `exists`)
-    and string escapes `\n \t \r \\ \"` (v0.8.0).
-
-[x] Dictionaries with `keys()` / `has()`, CLI `args()`, `sort()` (v0.9.0).
-
-[x] GitHub package manager: `import "user/repo@ver"`, `codex get` (v0.10.0).
-
-[x] Terminal control: `sleep()`, ANSI `\e` escapes, `pkgdir()` data repos (v0.11.0).
-
-* [ ] Built-in lightweight networking library for backend routing (http_listen).
-
-## 🔧 Repository Maintenance Commands
-**How to clean compiled binaries from local tracking:**
-To keep the source tree lightweight, avoid pushing compiled .exe files directly into the repository. Use .gitignore or clean tracked files using the following terminal command:
-```
-git rm --cached codex.exe
-git commit -m "Build: Remove compiled binary from source control"
-git push
-```
-## How to release a new standalone binary version:
-1. Navigate to the Releases section on the right side of this GitHub page.
-2. Click Create a new release (or Draft a new release).
-3. Set the version tag (e.g., v1.0.0) and give your release a title.
-4. Drag and drop your compiled codex.exe into the binary attachment box.
-5. Click Publish release to deliver a single-file executable to the end-users.
+* [ ] Built-in lightweight networking library for backends (`http_listen`)
+* [ ] Your idea — open an issue
