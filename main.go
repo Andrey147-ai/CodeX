@@ -143,6 +143,8 @@ func (l *Lexer) Tokenize() []Token {
 						sb.WriteRune('\t')
 					case 'r':
 						sb.WriteRune('\r')
+					case 'e':
+						sb.WriteRune('\x1b')
 					case '\\':
 						sb.WriteRune('\\')
 					case '"':
@@ -1953,6 +1955,43 @@ func (interp *Interpreter) evalFuncCall(call *FuncCall, env *Environment) (resul
 		}
 		_, err := os.Stat(path.StrVal)
 		return Value{Kind: "bool", BoolVal: err == nil}
+	}
+
+	if call.Name == "sleep" {
+		if len(call.Args) != 1 {
+			fmt.Fprintf(os.Stderr, "Runtime error: sleep() takes exactly 1 argument\n")
+			os.Exit(1)
+		}
+		ms := interp.eval(call.Args[0], env)
+		if ms.Kind != "number" || ms.NumVal < 0 {
+			fmt.Fprintf(os.Stderr, "Runtime error: sleep() needs non-negative milliseconds\n")
+			os.Exit(1)
+		}
+		time.Sleep(time.Duration(ms.NumVal * float64(time.Millisecond)))
+		return Value{Kind: "nil"}
+	}
+
+	if call.Name == "pkgdir" {
+		if len(call.Args) != 1 {
+			fmt.Fprintf(os.Stderr, "Runtime error: pkgdir() takes exactly 1 argument\n")
+			os.Exit(1)
+		}
+		name := interp.eval(call.Args[0], env)
+		if name.Kind != "string" {
+			fmt.Fprintf(os.Stderr, "Runtime error: pkgdir() needs a string, got %s\n", name.Kind)
+			os.Exit(1)
+		}
+		spec, ok := parsePkgSpec(name.StrVal)
+		if !ok {
+			fmt.Fprintf(os.Stderr, "Runtime error: pkgdir() wants user/repo[@ver], got %q\n", name.StrVal)
+			os.Exit(1)
+		}
+		dest, err := ensurePackage(spec)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Runtime error: pkgdir() fetch failed: %v\n", err)
+			os.Exit(1)
+		}
+		return Value{Kind: "string", StrVal: dest}
 	}
 
 	fn, ok := env.getFunc(call.Name)

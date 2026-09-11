@@ -108,6 +108,8 @@ go build -ldflags="-s -w" -o codex.exe main.go
 | `append_file(p, t)` | Append to file | `append_file("o.txt", t)` |
 | `exists(p)` | Path check | `exists("o.txt")` |
 | `http_get(url)` | Fetch URL body | `http_get("https://example.com")` |
+| `sleep(ms)` | Frame-accurate pause | `sleep(50)` |
+| `pkgdir(spec)` | Local path of a GitHub repo | `pkgdir("user/data")` |
 | `del(x)` | Manual scope cleanup | `del(b)` |
 
 ## 📦 Packages (GitHub)
@@ -126,6 +128,9 @@ Rules:
 * Versions are exact tags/branches after `@`, otherwise the default branch.
 * Downloaded zips are cached in `~/.codex/pkgs`, an imported file runs once.
 * Prefetch without running: `codex get user/repo@ver`.
+* Need a repo's files as data (not code)? `pkgdir("user/repo")` returns
+  its cache path — see `examples/badapple.cx` (6572 ASCII frames
+  streamed from a frames repo with `sleep()` + ANSI `\e` control).
 * To publish a package, push a repo with `main.cx` — done.
 
 ## 🗺️ Roadmap
@@ -150,6 +155,8 @@ CodeX is actively evolving with a focus on future full-stack and game developmen
 [x] Dictionaries with `keys()` / `has()`, CLI `args()`, `sort()` (v0.9.0).
 
 [x] GitHub package manager: `import "user/repo@ver"`, `codex get` (v0.10.0).
+
+[x] Terminal control: `sleep()`, ANSI `\e` escapes, `pkgdir()` data repos (v0.11.0).
 
 * [ ] Built-in lightweight networking library for backend routing (http_listen).
 

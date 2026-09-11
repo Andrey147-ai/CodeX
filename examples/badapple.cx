@@ -1,0 +1,58 @@
+// Terminal video: Bad Apple from ASCII frames.
+//
+// Engine used here (all general-purpose terminal primitives):
+//   pkgdir()    -> local path of any GitHub repo (cached fattener)
+//   read_file() -> frame text
+//   sleep(ms)   -> frame timing
+//   "\e"        -> ANSI escape (clear screen + cursor home)
+//
+// Frames: trung-kieen/bad-apple-ascii, files frames-ascii/outNNNN.jpg.txt
+// (one-time ~30MB repo fetch into the package cache).
+//
+// Usage: codex.exe badapple.cx [first] [last] [fps]
+//   default: frames 1..200 at 10 fps
+
+fn frameName(i) {
+    s := str(num(i))
+    if len(s) == 1 {
+        return "out000" + s + ".jpg.txt"
+    }
+    if len(s) == 2 {
+        return "out00" + s + ".jpg.txt"
+    }
+    if len(s) == 3 {
+        return "out0" + s + ".jpg.txt"
+    }
+    return "out" + s + ".jpg.txt"
+}
+
+print("fetching frames (first run downloads the frames repo once)...")
+base := pkgdir("trung-kieen/bad-apple-ascii") + "/frames-ascii/"
+
+first := 1
+last := 200
+fps := 10
+if len(args()) > 0 {
+    first = num(args()[0])
+}
+if len(args()) > 1 {
+    last = num(args()[1])
+}
+if len(args()) > 2 {
+    fps = num(args()[2])
+}
+ms := 1000 / fps
+
+i := first
+while i <= last {
+    f := base + frameName(i)
+    if exists(f) {
+        print("\e[2J\e[H" + read_file(f))
+        sleep(ms)
+    } else {
+        print("no more frames at ", i)
+        last = i - 1
+    }
+    i = i + 1
+}
+print("played ", last - first + 1, " frames")
