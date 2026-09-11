@@ -38,6 +38,17 @@ Boss survives with HP: 800
 New here? Start with [Tutorial Part 1: basics](docs/tutorial-01-basics.md) —
 it takes about 15 minutes.
 
+## 📖 Learning
+
+Tutorials live in `docs/` and come out one by one, each with runnable
+code and exercises:
+
+* **Part 1: basics** — first script, `print`, variables, math,
+  conditions, loops ([read it](docs/tutorial-01-basics.md))
+
+Each snippet in the tutorials is executed against the real interpreter
+before publishing, so what you read is what runs.
+
 ## How it works
 
 Three stages, all in `main.go`:

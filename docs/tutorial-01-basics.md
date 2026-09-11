@@ -1,79 +1,111 @@
-# CodeX Tutorial, Part 1: Basics
+# Учебник CodeX, часть 1: основы
 
-*Run your first script, variables, math, conditions, loops. ~15 minutes.*
+*Первый скрипт, переменные, математика, ветвления, циклы. Минут 15–20.*
 
-## 0. Setup (2 minutes)
+## 0. Установка и первый запуск
 
-1. Open [Releases](../..//releases) and download `codex.exe`.
-2. Put it in an empty folder, e.g. `C:\codex`.
-3. Create `hello.cx` next to it:
+1. Открой [Releases](../..//releases) и скачай `codex.exe`.
+2. Положи его в пустую папку, например `C:\codex`.
+3. Рядом создай файл `hello.cx` с одной строкой:
 
 ```
 print("hello, CodeX")
 ```
 
-4. Run it:
+4. В терминале перейди в эту папку и запусти:
 
 ```
 codex.exe hello.cx
 ```
 
-You should see `hello, CodeX`. If the file is missing, you'll get
-`Ошибка чтения` — check you're in the right folder.
+На экране должно появиться `hello, CodeX`.
 
-## 1. Printing things
+**Если вылезло `Ошибка чтения hello.cx: ... cannot find the path`** — не паникуй,
+это не баг языка. Так интерпретатор говорит «файл не найден». Обычно виновато
+одно из трёх: ты в другой папке (проверь командой `cd`), опечатка в имени
+(`hello.cx`, а не `helo.cx`), или файл сохранился с другим расширением
+(блокнот любит делать `hello.cx.txt` — включи показ расширений в проводнике).
 
-`print` takes as many values as you want and glues them together:
+## 1. Печать: `print`
+
+`print` принимает сколько угодно значений и склеивает их **без пробелов**:
 
 ```
 print("2 + 3 =", 2 + 3)
-print("pi is about ", 3.14)
 ```
 
-Comments start with `//` and run to the end of the line:
+Выведет `2 + 3 =5` — пятёрка прилипла. Пробелы добавляй сам:
 
 ```
-// this line does nothing
-print("this one does")
+print("2 + 3 = ", 2 + 3)   // 2 + 3 = 5
 ```
 
-## 2. Variables
-
-`:=` creates a variable, `=` updates an existing one:
+Комментарии начинаются с `//` и живут до конца строки:
 
 ```
-x := 5
-print(x)      // 5
-x = x + 1
-print(x)      // 6
+// меня интерпретатор пропустит
+print("а меня выполнит")   // а это комментарий после кода
 ```
 
-Types you'll meet: numbers (`42`, `3.5`), strings (`"hi"`),
-booleans (`true`, `false`). Convert between them when needed:
+## 2. Переменные
+
+Переменная создаётся через `:=` **один раз**, дальше меняется через `=`:
 
 ```
-print(num("19") + 3)   // 22
-print(str(42) + "!")   // 42!
+x := 5       // создали
+print(x)     // 5
+x = x + 1    // обновили
+print(x)     // 6
 ```
 
-## 3. Math that respects math
-
-Multiplication goes before addition, parentheses first — like school:
+**Частая ошибка новичка:** написать `=` вместо `==` в сравнении.
+Одинарное `=` — это всегда присваивание, а сравнение — двойное:
 
 ```
-print(2 + 3 * 4)     // 14, not 20
+y := 10
+print(y == 10)   // true — сравнение
+print(y = 10)    // ОШИБКА: тут нельзя присваивать
+```
+
+Типов всего несколько, и они честные:
+
+| Тип | Примеры |
+|---|---|
+| числа | `42`, `3.5`, `-7` |
+| строки | `"hi"`, `"42"` |
+| булевы | `true`, `false` |
+
+Число и строка — разные вещи, складывать их напрямую нельзя.
+Переводи явно:
+
+```
+print(num("19") + 3)   // 22 — строка стала числом
+print(str(42) + "!")   // 42! — число стало строкой
+```
+
+## 3. Математика как в школе
+
+Сначала умножение/деление, потом сложение/вычитание, скобки — главнее всего:
+
+```
+print(2 + 3 * 4)     // 14, а не 20
 print((2 + 3) * 4)   // 20
+print(10 - 4 / 2)    // 8
 ```
 
-Comparisons give back `true` / `false`, logic glues them:
+Сравнения (`== != < > <= >=`) возвращают `true`/`false`,
+а `&&` (и), `||` (или), `!` (не) их комбинируют:
 
 ```
 age := 16
-print(age >= 13 && age < 20)   // true
-print(!(age == 10))            // true
+print(age >= 13 && age < 20)   // true: оба условия верны
+print(age == 10 || age == 16)  // true: второе верно
+print(!(age == 10))            // true: "не (возраст 10)"
 ```
 
-## 4. Branching
+## 4. Ветвления: `if`
+
+Классика. Обрати внимание: после условия скобок нет, а блок — в `{ }`:
 
 ```
 score := 75
@@ -84,15 +116,25 @@ if score > 90 {
 } else {
     print("try again")
 }
+// выведет A
 ```
 
-Any value can be a condition: `0`, `""` and `false` count as false,
-everything else as true.
+Условием может быть вообще любое значение. Ложь — это `false`, `0`
+и пустая строка `""`. Всё остальное — истина:
 
-## 5. Loops
+```
+if "hello" {
+    print("строка непустая — зашли сюда")
+}
+if 0 {
+    print("сюда не зайдём никогда")
+}
+```
 
-Count with `for`, walk through values with `for-in`, repeat while
-something holds with `while`. `break` exits, `continue` skips ahead:
+## 5. Циклы
+
+Три вида. `for` — когда знаешь, сколько раз. `for-in` — пройтись по
+значениям. `while` — крутиться, пока условие верно:
 
 ```
 for i := 0; i < 3; i = i + 1 {
@@ -101,7 +143,7 @@ for i := 0; i < 3; i = i + 1 {
 
 for w in ["a", "b", "c"] {
     if w == "b" {
-        continue
+        continue      // пропускаем "b"
     }
     print(w)          // a c
 }
@@ -109,13 +151,16 @@ for w in ["a", "b", "c"] {
 n := 3
 while n > 0 {
     print(n)          // 3 2 1
-    n = n - 1
+    n = n - 1         // без этой строки крутился бы вечно!
 }
 ```
 
-## 6. Your turn
+`break` — выйти из цикла досрочно. `continue` — бросить итерацию
+и прыгнуть к следующей. Застрял в бесконечном цикле — жми `Ctrl+C`.
 
-Save this as `task1.cx`, guess what it prints, then run it:
+## 6. Проверь себя
+
+**Задача 1.** Сохрани как `task1.cx`, предскажи вывод, потом запусти:
 
 ```
 x := 2
@@ -132,13 +177,27 @@ print(total)
 ```
 
 <details>
-<summary>Answer</summary>
+<summary>Ответ</summary>
 
-`49` — the sum of 2..10 except the skipped 5 (2+3+4+6+7+8+9+10).
+`49`. Складываем 2..10, но пятёрку пропускаем через `continue`:
+2+3+4+6+7+8+9+10 = 49.
+
+</details>
+
+**Задача 2.** Выведи числа от 1 до 20, но вместо кратных трём печатай `tick`,
+а вместо кратных пяти — `tock` (подсказка: остаток от деления в языке пока
+считается вычитанием в цикле, либо сравнивай `num` по шагам — попробуй сам).
+
+<details>
+<summary>Одна из идей решения</summary>
+
+Держи счётчики троек и пятёрок отдельными переменными и сбрасывай их —
+`if t == 3 { print("tick") t = 0 }`. Полного деления с остатком в языке
+пока нет, это нормально: учишься обходиться тем, что есть.
 
 </details>
 
 ---
 
-*Part 2 will cover arrays, maps, functions and structs — enough to write
-a grade book. Parts ship one by one.*
+*Часть 2 — массивы, словари, функции и структуры: напишем журнал оценок.
+Части выходят по одной.*
