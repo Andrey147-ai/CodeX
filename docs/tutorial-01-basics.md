@@ -1,111 +1,112 @@
-# Учебник CodeX, часть 1: основы
+# CodeX Tutorial, Part 1: Basics
 
-*Первый скрипт, переменные, математика, ветвления, циклы. Минут 15–20.*
+*First script, variables, math, conditions, loops. ~15–20 minutes.*
 
-## 0. Установка и первый запуск
+## 0. Setup and first run
 
-1. Открой [Releases](../..//releases) и скачай `codex.exe`.
-2. Положи его в пустую папку, например `C:\codex`.
-3. Рядом создай файл `hello.cx` с одной строкой:
+1. Open [Releases](../..//releases) and download `codex.exe`.
+2. Drop it into an empty folder, e.g. `C:\codex`.
+3. Create `hello.cx` next to it with a single line:
 
 ```
 print("hello, CodeX")
 ```
 
-4. В терминале перейди в эту папку и запусти:
+4. Open a terminal in that folder and run:
 
 ```
 codex.exe hello.cx
 ```
 
-На экране должно появиться `hello, CodeX`.
+You should see `hello, CodeX`.
 
-**Если вылезло `Ошибка чтения hello.cx: ... cannot find the path`** — не паникуй,
-это не баг языка. Так интерпретатор говорит «файл не найден». Обычно виновато
-одно из трёх: ты в другой папке (проверь командой `cd`), опечатка в имени
-(`hello.cx`, а не `helo.cx`), или файл сохранился с другим расширением
-(блокнот любит делать `hello.cx.txt` — включи показ расширений в проводнике).
+**If you get `Ошибка чтения hello.cx: ... cannot find the path`** — don't
+panic, that's not a language bug. It's the interpreter saying "file not
+found". Usually one of three things: you're in the wrong folder (check
+with `cd`), a typo in the name (`hello.cx`, not `helo.cx`), or the file
+was saved with a hidden extension (Notepad loves making `hello.cx.txt` —
+turn on file extensions in Explorer).
 
-## 1. Печать: `print`
+## 1. Printing: `print`
 
-`print` принимает сколько угодно значений и склеивает их **без пробелов**:
+`print` takes as many values as you want and glues them together
+**with no spaces**:
 
 ```
 print("2 + 3 =", 2 + 3)
 ```
 
-Выведет `2 + 3 =5` — пятёрка прилипла. Пробелы добавляй сам:
+That outputs `2 + 3 =5` — the five sticks to the text. Add spaces yourself:
 
 ```
 print("2 + 3 = ", 2 + 3)   // 2 + 3 = 5
 ```
 
-Комментарии начинаются с `//` и живут до конца строки:
+Comments start with `//` and run to the end of the line:
 
 ```
-// меня интерпретатор пропустит
-print("а меня выполнит")   // а это комментарий после кода
+// the interpreter skips me
+print("but runs me")   // trailing comment works too
 ```
 
-## 2. Переменные
+## 2. Variables
 
-Переменная создаётся через `:=` **один раз**, дальше меняется через `=`:
+A variable is created with `:=` **once**, then updated with `=`:
 
 ```
-x := 5       // создали
+x := 5       // created
 print(x)     // 5
-x = x + 1    // обновили
+x = x + 1    // updated
 print(x)     // 6
 ```
 
-**Частая ошибка новичка:** написать `=` вместо `==` в сравнении.
-Одинарное `=` — это всегда присваивание, а сравнение — двойное:
+**Classic beginner mistake:** writing `=` instead of `==` in a comparison.
+Single `=` is always assignment; comparison is double:
 
 ```
 y := 10
-print(y == 10)   // true — сравнение
-print(y = 10)    // ОШИБКА: тут нельзя присваивать
+print(y == 10)   // true — comparison
+print(y = 10)    // ERROR: can't assign here
 ```
 
-Типов всего несколько, и они честные:
+There are only a few types, and they're honest:
 
-| Тип | Примеры |
+| Type | Examples |
 |---|---|
-| числа | `42`, `3.5`, `-7` |
-| строки | `"hi"`, `"42"` |
-| булевы | `true`, `false` |
+| numbers | `42`, `3.5`, `-7` |
+| strings | `"hi"`, `"42"` |
+| booleans | `true`, `false` |
 
-Число и строка — разные вещи, складывать их напрямую нельзя.
-Переводи явно:
-
-```
-print(num("19") + 3)   // 22 — строка стала числом
-print(str(42) + "!")   // 42! — число стало строкой
-```
-
-## 3. Математика как в школе
-
-Сначала умножение/деление, потом сложение/вычитание, скобки — главнее всего:
+A number and a string are different things — convert explicitly:
 
 ```
-print(2 + 3 * 4)     // 14, а не 20
+print(num("19") + 3)   // 22 — string became a number
+print(str(42) + "!")   // 42! — number became a string
+```
+
+## 3. Math like in school
+
+Multiplication before addition, parentheses beat everything:
+
+```
+print(2 + 3 * 4)     // 14, not 20
 print((2 + 3) * 4)   // 20
 print(10 - 4 / 2)    // 8
 ```
 
-Сравнения (`== != < > <= >=`) возвращают `true`/`false`,
-а `&&` (и), `||` (или), `!` (не) их комбинируют:
+Comparisons (`== != < > <= >=`) return `true` / `false`, and `&&` (and),
+`||` (or), `!` (not) combine them:
 
 ```
 age := 16
-print(age >= 13 && age < 20)   // true: оба условия верны
-print(age == 10 || age == 16)  // true: второе верно
-print(!(age == 10))            // true: "не (возраст 10)"
+print(age >= 13 && age < 20)   // true: both hold
+print(age == 10 || age == 16)  // true: second one holds
+print(!(age == 10))            // true: "not (age is 10)"
 ```
 
-## 4. Ветвления: `if`
+## 4. Branching: `if`
 
-Классика. Обрати внимание: после условия скобок нет, а блок — в `{ }`:
+The classic. Note: no parentheses around the condition, block in `{ }`:
 
 ```
 score := 75
@@ -116,25 +117,25 @@ if score > 90 {
 } else {
     print("try again")
 }
-// выведет A
+// prints A
 ```
 
-Условием может быть вообще любое значение. Ложь — это `false`, `0`
-и пустая строка `""`. Всё остальное — истина:
+Almost any value works as a condition. False is `false`, `0` and the
+empty string `""`. Everything else is true:
 
 ```
 if "hello" {
-    print("строка непустая — зашли сюда")
+    print("non-empty string — we get here")
 }
 if 0 {
-    print("сюда не зайдём никогда")
+    print("never reached")
 }
 ```
 
-## 5. Циклы
+## 5. Loops
 
-Три вида. `for` — когда знаешь, сколько раз. `for-in` — пройтись по
-значениям. `while` — крутиться, пока условие верно:
+Three flavors. `for` when you know how many times. `for-in` to walk
+values. `while` to repeat while something holds:
 
 ```
 for i := 0; i < 3; i = i + 1 {
@@ -143,7 +144,7 @@ for i := 0; i < 3; i = i + 1 {
 
 for w in ["a", "b", "c"] {
     if w == "b" {
-        continue      // пропускаем "b"
+        continue      // skip "b"
     }
     print(w)          // a c
 }
@@ -151,16 +152,16 @@ for w in ["a", "b", "c"] {
 n := 3
 while n > 0 {
     print(n)          // 3 2 1
-    n = n - 1         // без этой строки крутился бы вечно!
+    n = n - 1         // without this line it spins forever!
 }
 ```
 
-`break` — выйти из цикла досрочно. `continue` — бросить итерацию
-и прыгнуть к следующей. Застрял в бесконечном цикле — жми `Ctrl+C`.
+`break` exits a loop early. `continue` drops the iteration and jumps to
+the next one. Stuck in an infinite loop — press `Ctrl+C`.
 
-## 6. Проверь себя
+## 6. Test yourself
 
-**Задача 1.** Сохрани как `task1.cx`, предскажи вывод, потом запусти:
+**Task 1.** Save as `task1.cx`, predict the output, then run it:
 
 ```
 x := 2
@@ -177,27 +178,18 @@ print(total)
 ```
 
 <details>
-<summary>Ответ</summary>
+<summary>Answer</summary>
 
-`49`. Складываем 2..10, но пятёрку пропускаем через `continue`:
+`49`. We add 2..10 but skip five via `continue`:
 2+3+4+6+7+8+9+10 = 49.
 
 </details>
 
-**Задача 2.** Выведи числа от 1 до 20, но вместо кратных трём печатай `tick`,
-а вместо кратных пяти — `tock` (подсказка: остаток от деления в языке пока
-считается вычитанием в цикле, либо сравнивай `num` по шагам — попробуй сам).
-
-<details>
-<summary>Одна из идей решения</summary>
-
-Держи счётчики троек и пятёрок отдельными переменными и сбрасывай их —
-`if t == 3 { print("tick") t = 0 }`. Полного деления с остатком в языке
-пока нет, это нормально: учишься обходиться тем, что есть.
-
-</details>
+**Task 2.** Print numbers 1 to 20, but `tick` instead of multiples of three
+and `tock` instead of multiples of five (hint: the language has no modulo
+yet — keep separate counters and reset them, work with what you have).
 
 ---
 
-*Часть 2 — массивы, словари, функции и структуры: напишем журнал оценок.
-Части выходят по одной.*
+*Part 2 — arrays, maps, functions and structs: we'll write a grade book.
+Parts ship one by one.*
