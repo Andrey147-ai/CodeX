@@ -767,6 +767,26 @@ func (p *Parser) parseStatement() ASTNode {
 				p.expect(TOK_ASSIGN)
 				return &VarDecl{Name: name, Value: p.parseExpr()}
 			}
+			// составное присваивание: x += 1 → x = x + 1
+			if p.tokens[idx].Type == TOK_PLUS || p.tokens[idx].Type == TOK_MINUS ||
+				p.tokens[idx].Type == TOK_STAR || p.tokens[idx].Type == TOK_SLASH ||
+				p.tokens[idx].Type == TOK_PERCENT {
+				j := idx + 1
+				for j < len(p.tokens) && (p.tokens[j].Type == TOK_NEWLINE || p.tokens[j].Type == TOK_COMMENT) {
+					j++
+				}
+				if j < len(p.tokens) && p.tokens[j].Type == TOK_EQ {
+					name := p.next().Value
+					opTok := p.next()
+					p.expect(TOK_EQ)
+					val := p.parseExpr()
+					return &Assign{Name: name, Value: &BinaryOp{
+						Left:  &Identifier{Name: name},
+						Op:    opTok.Value,
+						Right: val,
+					}}
+				}
+			}
 			if p.tokens[idx].Type == TOK_EQ {
 				name := p.next().Value
 				p.expect(TOK_EQ)
@@ -1118,7 +1138,7 @@ func (p *Parser) parseEquality() ASTNode {
 	left := p.parseComparison()
 	for {
 		t := p.peek().Type
-		if t != TOK_EQEQ && t != TOK_NEQ {
+		if t != TOK_EQEQ && t != TOK_NEQ && t != TOK_IN {
 			break
 		}
 		opTok := p.next()
@@ -2071,6 +2091,61 @@ func (interp *Interpreter) evalFuncCall(call *FuncCall, env *Environment) (resul
 		return Value{Kind: "string", StrVal: strings.TrimRight(line, "\r\n")}
 	}
 
+	if call.Name == "replace" {
+		if len(call.Args) != 3 {
+			fail("Runtime error: replace() takes exactly 3 arguments\n")
+		}
+		s := interp.eval(call.Args[0], env)
+		oldSub := interp.eval(call.Args[1], env)
+		newSub := interp.eval(call.Args[2], env)
+		if s.Kind != "string" || oldSub.Kind != "string" || newSub.Kind != "string" {
+			fail("Runtime error: replace() needs strings\n")
+		}
+		return Value{Kind: "string", StrVal: strings.ReplaceAll(s.StrVal, oldSub.StrVal, newSub.StrVal)}
+	}
+
+	if call.Name == "trim" {
+		if len(call.Args) != 1 {
+			fail("Runtime error: trim() takes exactly 1 argument\n")
+		}
+		s := interp.eval(call.Args[0], env)
+		if s.Kind != "string" {
+			fail("Runtime error: trim() needs a string, got %s\n", s.Kind)
+		}
+		return Value{Kind: "string", StrVal: strings.TrimSpace(s.StrVal)}
+	}
+
+	if call.Name == "repeat" {
+		if len(call.Args) != 2 {
+			fail("Runtime error: repeat() takes exactly 2 arguments\n")
+		}
+		s := interp.eval(call.Args[0], env)
+		n := interp.eval(call.Args[1], env)
+		if s.Kind != "string" || n.Kind != "number" {
+			fail("Runtime error: repeat() needs (string, number)\n")
+		}
+		count := int(n.NumVal)
+		if count < 0 || count > 100000 {
+			fail("Runtime error: repeat() count out of range\n")
+		}
+		return Value{Kind: "string", StrVal: strings.Repeat(s.StrVal, count)}
+	}
+
+	if call.Name == "starts_with" || call.Name == "ends_with" {
+		if len(call.Args) != 2 {
+			fail("Runtime error: %s() takes exactly 2 arguments\n", call.Name)
+		}
+		s := interp.eval(call.Args[0], env)
+		sub := interp.eval(call.Args[1], env)
+		if s.Kind != "string" || sub.Kind != "string" {
+			fail("Runtime error: %s() needs strings\n", call.Name)
+		}
+		if call.Name == "starts_with" {
+			return Value{Kind: "bool", BoolVal: strings.HasPrefix(s.StrVal, sub.StrVal)}
+		}
+		return Value{Kind: "bool", BoolVal: strings.HasSuffix(s.StrVal, sub.StrVal)}
+	}
+
 	if call.Name == "upper" || call.Name == "lower" {
 		if len(call.Args) != 1 {
 			fail("Runtime error: %s() takes exactly 1 argument\n", call.Name)
@@ -2408,6 +2483,88 @@ func (interp *Interpreter) evalFuncCall(call *FuncCall, env *Environment) (resul
 			fail("Runtime error: now() takes no arguments\n")
 		}
 		return Value{Kind: "number", NumVal: float64(time.Now().Unix())}
+	}
+
+	if call.Name == "date" {
+		if len(call.Args) > 1 {
+			fail("Runtime error: date() takes at most 1 argument\n")
+		}
+		t := time.Now()
+		if len(call.Args) == 1 {
+			v := interp.eval(call.Args[0], env)
+			if v.Kind != "number" {
+				fail("Runtime error: date() needs a timestamp, got %s\n", v.Kind)
+			}
+			t = time.Unix(int64(v.NumVal), 0)
+		}
+		return Value{Kind: "string", StrVal: t.Format("2006-01-02 15:04:05")}
+	}
+
+	if call.Name == "ls" {
+		if len(call.Args) > 1 {
+			fail("Runtime error: ls() takes at most 1 argument\n")
+		}
+		dir := "."
+		if len(call.Args) == 1 {
+			d := interp.eval(call.Args[0], env)
+			if d.Kind != "string" {
+				fail("Runtime error: ls() needs a string path, got %s\n", d.Kind)
+			}
+			dir = d.StrVal
+		}
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			fail("Runtime error: ls() failed: %v\n", err)
+		}
+		items := make([]Value, 0, len(entries))
+		for _, e := range entries {
+			items = append(items, Value{Kind: "string", StrVal: e.Name()})
+		}
+		sort.Slice(items, func(a, b int) bool { return items[a].StrVal < items[b].StrVal })
+		return Value{Kind: "array", Items: items}
+	}
+
+	if call.Name == "mkdir" {
+		if len(call.Args) != 1 {
+			fail("Runtime error: mkdir() takes exactly 1 argument\n")
+		}
+		p := interp.eval(call.Args[0], env)
+		if p.Kind != "string" {
+			fail("Runtime error: mkdir() needs a string path, got %s\n", p.Kind)
+		}
+		if err := os.MkdirAll(p.StrVal, 0755); err != nil {
+			fail("Runtime error: mkdir() failed: %v\n", err)
+		}
+		return Value{Kind: "nil"}
+	}
+
+	if call.Name == "remove" {
+		if len(call.Args) != 1 {
+			fail("Runtime error: remove() takes exactly 1 argument\n")
+		}
+		p := interp.eval(call.Args[0], env)
+		if p.Kind != "string" {
+			fail("Runtime error: remove() needs a string path, got %s\n", p.Kind)
+		}
+		if err := os.Remove(p.StrVal); err != nil {
+			fail("Runtime error: remove() failed: %v\n", err)
+		}
+		return Value{Kind: "nil"}
+	}
+
+	if call.Name == "rename" {
+		if len(call.Args) != 2 {
+			fail("Runtime error: rename() takes exactly 2 arguments\n")
+		}
+		oldPath := interp.eval(call.Args[0], env)
+		newPath := interp.eval(call.Args[1], env)
+		if oldPath.Kind != "string" || newPath.Kind != "string" {
+			fail("Runtime error: rename() needs strings\n")
+		}
+		if err := os.Rename(oldPath.StrVal, newPath.StrVal); err != nil {
+			fail("Runtime error: rename() failed: %v\n", err)
+		}
+		return Value{Kind: "nil"}
 	}
 
 	if call.Name == "rand" {
@@ -3094,6 +3251,30 @@ func (interp *Interpreter) evalBinaryOp(left Value, op string, right Value) Valu
 			eq = !eq
 		}
 		return Value{Kind: "bool", BoolVal: eq}
+	}
+	if op == "in" {
+		switch right.Kind {
+		case "array":
+			for _, item := range right.Items {
+				if valuesEqual(left, item) {
+					return Value{Kind: "bool", BoolVal: true}
+				}
+			}
+			return Value{Kind: "bool", BoolVal: false}
+		case "map":
+			if left.Kind != "string" {
+				return Value{Kind: "bool", BoolVal: false}
+			}
+			_, ok := right.MapVal[left.StrVal]
+			return Value{Kind: "bool", BoolVal: ok}
+		case "string":
+			if left.Kind != "string" {
+				fail("Runtime error: 'in' needs a string on the left for strings\n")
+			}
+			return Value{Kind: "bool", BoolVal: strings.Contains(right.StrVal, left.StrVal)}
+		default:
+			fail("Runtime error: 'in' needs array, map or string on the right\n")
+		}
 	}
 	if left.Kind == "number" && right.Kind == "number" {
 		switch op {

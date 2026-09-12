@@ -200,7 +200,12 @@ import "Andrey147-ai/strutils@v1.2.0"
 | `map/filter/each` | Higher-order over arrays | `map(a, fn(x){return x*2})` |
 | `run(prog, args)` | Run a program | `run("go", ["version"])` |
 | `switch/case/else` | Multi-branch | `switch x { case 1: {...} }` |
-| `name: loop` + `break name` | Labeled loop control | `break outer` || `a div b`, `a % b` | Integer division, modulo | `7 div 2` → `3`, `7 % 3` → `1` |
+| `name: loop` + `break name` | Labeled loop control | `break outer` |
+| `ls/mkdir/remove/rename` | More file ops | `ls(".")` |
+| `replace/trim/repeat/starts_with/ends_with` | String tools | `trim(" hi ")` |
+| `x in y` | Membership (array/map/string) | `2 in [1,2]` |
+| `+= -= *= /= %=` | Compound assignment | `x += 5` |
+| `date(ts)` | Readable timestamp | `date()` || `a div b`, `a % b` | Integer division, modulo | `7 div 2` → `3`, `7 % 3` → `1` |
 | `x[i:j]` | Slices (strings/arrays, negatives ok) | `"hello"[1:4]` → `"ell"` |
 | `del(x)` | Manual scope cleanup | `del(b)` |
 
