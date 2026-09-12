@@ -158,6 +158,8 @@ import "Andrey147-ai/strutils@v1.2.0"
 | `env(name)` | Env var or `nil` | `env("PATH")` |
 | `exit(code)` | Exit with code | `exit(3)` |
 | `now()` | Unix timestamp | `now()` |
+| `parse_json(s)` | JSON string to value | `parse_json("{\"a\":1}")` |
+| `to_json(x)` | Value to JSON string | `to_json([1,"a"])` |
 | `a div b`, `a % b` | Integer division, modulo | `7 div 2` → `3`, `7 % 3` → `1` |
 | `x[i:j]` | Slices (strings/arrays, negatives ok) | `"hello"[1:4]` → `"ell"` |
 | `del(x)` | Manual scope cleanup | `del(b)` |

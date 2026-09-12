@@ -2125,6 +2125,32 @@ func (interp *Interpreter) evalFuncCall(call *FuncCall, env *Environment) (resul
 		return Value{Kind: "number", NumVal: float64(time.Now().Unix())}
 	}
 
+	if call.Name == "parse_json" {
+		if len(call.Args) != 1 {
+			fmt.Fprintf(os.Stderr, "Runtime error: parse_json() takes exactly 1 argument\n")
+			os.Exit(1)
+		}
+		s := interp.eval(call.Args[0], env)
+		if s.Kind != "string" {
+			fmt.Fprintf(os.Stderr, "Runtime error: parse_json() needs a string, got %s\n", s.Kind)
+			os.Exit(1)
+		}
+		val, err := parseJSON(s.StrVal)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Runtime error: parse_json() failed: %v\n", err)
+			os.Exit(1)
+		}
+		return val
+	}
+
+	if call.Name == "to_json" {
+		if len(call.Args) != 1 {
+			fmt.Fprintf(os.Stderr, "Runtime error: to_json() takes exactly 1 argument\n")
+			os.Exit(1)
+		}
+		return Value{Kind: "string", StrVal: valueToJSON(interp.eval(call.Args[0], env))}
+	}
+
 	if call.Name == "sleep" {
 		if len(call.Args) != 1 {
 			fmt.Fprintf(os.Stderr, "Runtime error: sleep() takes exactly 1 argument\n")
@@ -2666,6 +2692,310 @@ func isTruthy(v Value) bool {
 		return true
 	}
 	return false
+}
+
+// ========== JSON ==========
+
+type jsonParser struct {
+	s   []rune
+	pos int
+}
+
+func parseJSON(s string) (Value, error) {
+	p := &jsonParser{s: []rune(s)}
+	p.skipWS()
+	v, err := p.parseValue()
+	if err != nil {
+		return Value{}, err
+	}
+	p.skipWS()
+	if p.pos != len(p.s) {
+		return Value{}, fmt.Errorf("trailing data at %d", p.pos)
+	}
+	return v, nil
+}
+
+func (p *jsonParser) skipWS() {
+	for p.pos < len(p.s) && (p.s[p.pos] == ' ' || p.s[p.pos] == '\t' || p.s[p.pos] == '\n' || p.s[p.pos] == '\r') {
+		p.pos++
+	}
+}
+
+func (p *jsonParser) parseValue() (Value, error) {
+	if p.pos >= len(p.s) {
+		return Value{}, fmt.Errorf("unexpected end of input")
+	}
+	switch p.s[p.pos] {
+	case '{':
+		return p.parseObject()
+	case '[':
+		return p.parseArray()
+	case '"':
+		s, err := p.parseJSONString()
+		if err != nil {
+			return Value{}, err
+		}
+		return Value{Kind: "string", StrVal: s}, nil
+	case 't':
+		return p.expectWord("true", Value{Kind: "bool", BoolVal: true})
+	case 'f':
+		return p.expectWord("false", Value{Kind: "bool", BoolVal: false})
+	case 'n':
+		return p.expectWord("null", Value{Kind: "nil"})
+	default:
+		return p.parseJSONNumber()
+	}
+}
+
+func (p *jsonParser) expectWord(word string, val Value) (Value, error) {
+	for _, c := range word {
+		if p.pos >= len(p.s) || p.s[p.pos] != c {
+			return Value{}, fmt.Errorf("bad literal at %d", p.pos)
+		}
+		p.pos++
+	}
+	return val, nil
+}
+
+func (p *jsonParser) parseObject() (Value, error) {
+	p.pos++ // {
+	m := make(map[string]Value)
+	p.skipWS()
+	if p.pos < len(p.s) && p.s[p.pos] == '}' {
+		p.pos++
+		return Value{Kind: "map", MapVal: m}, nil
+	}
+	for {
+		p.skipWS()
+		if p.pos >= len(p.s) || p.s[p.pos] != '"' {
+			return Value{}, fmt.Errorf("object key must be a string at %d", p.pos)
+		}
+		key, err := p.parseJSONString()
+		if err != nil {
+			return Value{}, err
+		}
+		p.skipWS()
+		if p.pos >= len(p.s) || p.s[p.pos] != ':' {
+			return Value{}, fmt.Errorf("expected ':' at %d", p.pos)
+		}
+		p.pos++
+		p.skipWS()
+		val, err := p.parseValue()
+		if err != nil {
+			return Value{}, err
+		}
+		m[key] = val
+		p.skipWS()
+		if p.pos >= len(p.s) {
+			return Value{}, fmt.Errorf("unterminated object")
+		}
+		if p.s[p.pos] == ',' {
+			p.pos++
+			continue
+		}
+		if p.s[p.pos] == '}' {
+			p.pos++
+			return Value{Kind: "map", MapVal: m}, nil
+		}
+		return Value{}, fmt.Errorf("expected ',' or '}' at %d", p.pos)
+	}
+}
+
+func (p *jsonParser) parseArray() (Value, error) {
+	p.pos++ // [
+	items := []Value{}
+	p.skipWS()
+	if p.pos < len(p.s) && p.s[p.pos] == ']' {
+		p.pos++
+		return Value{Kind: "array", Items: items}, nil
+	}
+	for {
+		p.skipWS()
+		val, err := p.parseValue()
+		if err != nil {
+			return Value{}, err
+		}
+		items = append(items, val)
+		p.skipWS()
+		if p.pos >= len(p.s) {
+			return Value{}, fmt.Errorf("unterminated array")
+		}
+		if p.s[p.pos] == ',' {
+			p.pos++
+			continue
+		}
+		if p.s[p.pos] == ']' {
+			p.pos++
+			return Value{Kind: "array", Items: items}, nil
+		}
+		return Value{}, fmt.Errorf("expected ',' or ']' at %d", p.pos)
+	}
+}
+
+func (p *jsonParser) parseJSONString() (string, error) {
+	p.pos++ // opening quote
+	var sb strings.Builder
+	for {
+		if p.pos >= len(p.s) {
+			return "", fmt.Errorf("unterminated string")
+		}
+		c := p.s[p.pos]
+		if c == '"' {
+			p.pos++
+			return sb.String(), nil
+		}
+		if c != '\\' {
+			sb.WriteRune(c)
+			p.pos++
+			continue
+		}
+		p.pos++
+		if p.pos >= len(p.s) {
+			return "", fmt.Errorf("bad escape at end")
+		}
+		e := p.s[p.pos]
+		p.pos++
+		switch e {
+		case '"':
+			sb.WriteRune('"')
+		case '\\':
+			sb.WriteRune('\\')
+		case '/':
+			sb.WriteRune('/')
+		case 'b':
+			sb.WriteRune('\b')
+		case 'f':
+			sb.WriteRune('\f')
+		case 'n':
+			sb.WriteRune('\n')
+		case 'r':
+			sb.WriteRune('\r')
+		case 't':
+			sb.WriteRune('\t')
+		case 'u':
+			if p.pos+4 > len(p.s) {
+				return "", fmt.Errorf("bad \\u escape")
+			}
+			var code int
+			for _, h := range p.s[p.pos : p.pos+4] {
+				code *= 16
+				switch {
+				case h >= '0' && h <= '9':
+					code += int(h - '0')
+				case h >= 'a' && h <= 'f':
+					code += int(h-'a') + 10
+				case h >= 'A' && h <= 'F':
+					code += int(h-'A') + 10
+				default:
+					return "", fmt.Errorf("bad hex digit %q", h)
+				}
+			}
+			p.pos += 4
+			sb.WriteRune(rune(code))
+		default:
+			return "", fmt.Errorf("bad escape '\\%c'", e)
+		}
+	}
+}
+
+func (p *jsonParser) parseJSONNumber() (Value, error) {
+	start := p.pos
+	if p.pos < len(p.s) && p.s[p.pos] == '-' {
+		p.pos++
+	}
+	for p.pos < len(p.s) && p.s[p.pos] >= '0' && p.s[p.pos] <= '9' {
+		p.pos++
+	}
+	if p.pos < len(p.s) && p.s[p.pos] == '.' {
+		p.pos++
+		for p.pos < len(p.s) && p.s[p.pos] >= '0' && p.s[p.pos] <= '9' {
+			p.pos++
+		}
+	}
+	if p.pos < len(p.s) && (p.s[p.pos] == 'e' || p.s[p.pos] == 'E') {
+		p.pos++
+		if p.pos < len(p.s) && (p.s[p.pos] == '+' || p.s[p.pos] == '-') {
+			p.pos++
+		}
+		for p.pos < len(p.s) && p.s[p.pos] >= '0' && p.s[p.pos] <= '9' {
+			p.pos++
+		}
+	}
+	text := string(p.s[start:p.pos])
+	f, err := strconv.ParseFloat(text, 64)
+	if err != nil {
+		return Value{}, fmt.Errorf("bad number %q", text)
+	}
+	return Value{Kind: "number", NumVal: f}, nil
+}
+
+func valueToJSON(v Value) string {
+	switch v.Kind {
+	case "number":
+		return strconv.FormatFloat(v.NumVal, 'f', -1, 64)
+	case "string":
+		var sb strings.Builder
+		sb.WriteRune('"')
+		for _, c := range v.StrVal {
+			switch c {
+			case '"':
+				sb.WriteString("\\\"")
+			case '\\':
+				sb.WriteString("\\\\")
+			case '\n':
+				sb.WriteString("\\n")
+			case '\r':
+				sb.WriteString("\\r")
+			case '\t':
+				sb.WriteString("\\t")
+			default:
+				if c < 0x20 {
+					fmt.Fprintf(&sb, "\\u%04x", c)
+				} else {
+					sb.WriteRune(c)
+				}
+			}
+		}
+		sb.WriteRune('"')
+		return sb.String()
+	case "bool":
+		if v.BoolVal {
+			return "true"
+		}
+		return "false"
+	case "nil":
+		return "null"
+	case "array":
+		parts := make([]string, 0, len(v.Items))
+		for _, item := range v.Items {
+			parts = append(parts, valueToJSON(item))
+		}
+		return "[" + strings.Join(parts, ",") + "]"
+	case "map":
+		mapKeys := make([]string, 0, len(v.MapVal))
+		for k := range v.MapVal {
+			mapKeys = append(mapKeys, k)
+		}
+		sort.Strings(mapKeys)
+		parts := make([]string, 0, len(mapKeys))
+		for _, k := range mapKeys {
+			parts = append(parts, valueToJSON(Value{Kind: "string", StrVal: k})+":"+valueToJSON(v.MapVal[k]))
+		}
+		return "{" + strings.Join(parts, ",") + "}"
+	case "struct":
+		fields := make([]string, 0, len(v.Fields))
+		for k := range v.Fields {
+			fields = append(fields, k)
+		}
+		sort.Strings(fields)
+		parts := make([]string, 0, len(fields))
+		for _, k := range fields {
+			parts = append(parts, valueToJSON(Value{Kind: "string", StrVal: k})+":"+valueToJSON(v.Fields[k]))
+		}
+		return "{" + strings.Join(parts, ",") + "}"
+	default:
+		return "null"
+	}
 }
 
 func valueToString(v Value) string {
