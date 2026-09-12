@@ -38,6 +38,25 @@ Boss survives with HP: 800
 New here? Start with [Tutorial Part 1: basics](docs/tutorial-01-basics.md) —
 it takes about 15 minutes.
 
+## 💻 Interactive mode and formatting
+
+Run `codex.exe` with no arguments for a REPL: definitions persist,
+expressions echo their values, runtime errors don't kill the session:
+
+```
+>> x := 5
+>> x * 2
+10
+>> fn double(n) {
+..     return n * 2
+.. }
+>> double(21)
+42
+```
+
+`codex.exe fmt main.cx` prints canonically formatted source
+(4-space indent, comments kept, idempotent).
+
 ## 📖 Learning
 
 Tutorials live in `docs/` and come out one by one, each with runnable

@@ -73,6 +73,7 @@ const (
 	TOK_NIL
 	TOK_TRY
 	TOK_CATCH
+	TOK_COMMENT
 )
 
 type Token struct {
@@ -128,9 +129,13 @@ func (l *Lexer) Tokenize() []Token {
 		}
 
 		if ch == '/' && l.pos+1 < len(l.input) && l.input[l.pos+1] == '/' {
+			tokLine, tokCol := l.line, l.col
+			l.advancePos(2)
+			start := l.pos
 			for l.pos < len(l.input) && l.input[l.pos] != '\n' {
 				l.advancePos(1)
 			}
+			l.tokens = append(l.tokens, Token{TOK_COMMENT, string(l.input[start:l.pos]), tokLine, tokCol})
 			continue
 		}
 
@@ -554,16 +559,22 @@ func NewParser(tokens []Token) *Parser {
 	p := &Parser{tokens: tokens, pos: 0, structNames: make(map[string]bool)}
 	// прескан: запоминаем все имена структур, чтобы отличать
 	// литерал Type{...} от блока после выражения (if cond {).
-	for i := 0; i+1 < len(tokens); i++ {
-		if tokens[i].Type == TOK_STRUCT && tokens[i+1].Type == TOK_IDENT {
-			p.structNames[tokens[i+1].Value] = true
+	for i := 0; i < len(tokens); i++ {
+		if tokens[i].Type == TOK_STRUCT {
+			j := i + 1
+			for j < len(tokens) && (tokens[j].Type == TOK_NEWLINE || tokens[j].Type == TOK_COMMENT) {
+				j++
+			}
+			if j < len(tokens) && tokens[j].Type == TOK_IDENT {
+				p.structNames[tokens[j].Value] = true
+			}
 		}
 	}
 	return p
 }
 
 func (p *Parser) skipNewlines() {
-	for p.pos < len(p.tokens) && p.tokens[p.pos].Type == TOK_NEWLINE {
+	for p.pos < len(p.tokens) && (p.tokens[p.pos].Type == TOK_NEWLINE || p.tokens[p.pos].Type == TOK_COMMENT) {
 		p.pos++
 	}
 }
@@ -619,6 +630,11 @@ func (p *Parser) parseStatement() ASTNode {
 	p.skipNewlines()
 	tok := p.peek()
 
+	if tok.Type == TOK_COMMENT {
+		p.next()
+		return nil
+	}
+
 	switch tok.Type {
 	case TOK_STRUCT:
 		return p.parseStructDef()
@@ -659,7 +675,7 @@ func (p *Parser) parseStatement() ASTNode {
 
 	if tok.Type == TOK_IDENT {
 		idx := p.pos + 1
-		for idx < len(p.tokens) && p.tokens[idx].Type == TOK_NEWLINE {
+		for idx < len(p.tokens) && (p.tokens[idx].Type == TOK_NEWLINE || p.tokens[idx].Type == TOK_COMMENT) {
 			idx++
 		}
 
@@ -758,24 +774,21 @@ func (p *Parser) parseFuncDef() ASTNode {
 
 // isMethodReceiver checks '(' IDENT IDENT ')' — receiver vs plain params.
 func (p *Parser) isMethodReceiver() bool {
-	idx := p.pos + 1
-	for idx < len(p.tokens) && p.tokens[idx].Type == TOK_NEWLINE {
-		idx++
+	skipGap := func(idx int) int {
+		for idx < len(p.tokens) && (p.tokens[idx].Type == TOK_NEWLINE || p.tokens[idx].Type == TOK_COMMENT) {
+			idx++
+		}
+		return idx
 	}
+	idx := skipGap(p.pos + 1)
 	if idx >= len(p.tokens) || p.tokens[idx].Type != TOK_IDENT {
 		return false
 	}
-	idx++
-	for idx < len(p.tokens) && p.tokens[idx].Type == TOK_NEWLINE {
-		idx++
-	}
+	idx = skipGap(idx + 1)
 	if idx >= len(p.tokens) || p.tokens[idx].Type != TOK_IDENT {
 		return false
 	}
-	idx++
-	for idx < len(p.tokens) && p.tokens[idx].Type == TOK_NEWLINE {
-		idx++
-	}
+	idx = skipGap(idx + 1)
 	return idx < len(p.tokens) && p.tokens[idx].Type == TOK_RPAREN
 }
 
@@ -841,12 +854,16 @@ func (p *Parser) parseWhile() ASTNode {
 // isIndexAssign reports whether the statement starting at the current
 // identifier is an indexed assignment like a[0] = v or s.f[1] = v.
 func (p *Parser) isIndexAssign() bool {
-	idx := p.pos + 1
-	seenBracket := false
-	for {
-		for idx < len(p.tokens) && p.tokens[idx].Type == TOK_NEWLINE {
+	skipGap := func(idx int) int {
+		for idx < len(p.tokens) && (p.tokens[idx].Type == TOK_NEWLINE || p.tokens[idx].Type == TOK_COMMENT) {
 			idx++
 		}
+		return idx
+	}
+	idx := skipGap(p.pos + 1)
+	seenBracket := false
+	for {
+		idx = skipGap(idx)
 		if idx >= len(p.tokens) {
 			return false
 		}
@@ -871,9 +888,7 @@ func (p *Parser) isIndexAssign() bool {
 		}
 		if t == TOK_DOT {
 			idx++
-			for idx < len(p.tokens) && p.tokens[idx].Type == TOK_NEWLINE {
-				idx++
-			}
+			idx = skipGap(idx)
 			if idx < len(p.tokens) && p.tokens[idx].Type == TOK_IDENT {
 				idx++
 				continue
@@ -1315,12 +1330,14 @@ type Interpreter struct {
 	imported    map[string]bool
 	importFiles []string
 	importStack []string
+	structNames map[string]bool
 }
 
 func NewInterpreter() *Interpreter {
 	return &Interpreter{
-		globalEnv: NewEnvironment(nil),
-		imported:  make(map[string]bool),
+		globalEnv:   NewEnvironment(nil),
+		imported:    make(map[string]bool),
+		structNames: make(map[string]bool),
 	}
 }
 
@@ -1331,6 +1348,7 @@ func (interp *Interpreter) eval(node ASTNode, env *Environment) Value {
 			switch s := stmt.(type) {
 			case *StructDef:
 				env.structs[s.Name] = s
+				interp.structNames[s.Name] = true
 			case *FuncDef:
 				if s.RecvType != "" {
 					if env.methods[s.RecvType] == nil {
@@ -3179,10 +3197,339 @@ func valueToString(v Value) string {
 	return "?"
 }
 
+// ========== REPL ==========
+
+func replDepth(s string) int {
+	depth := 0
+	inStr := false
+	esc := false
+	for _, c := range s {
+		if inStr {
+			if esc {
+				esc = false
+				continue
+			}
+			if c == '\\' {
+				esc = true
+				continue
+			}
+			if c == '"' {
+				inStr = false
+			}
+			continue
+		}
+		switch c {
+		case '"':
+			inStr = true
+		case '{', '(', '[':
+			depth++
+		case '}', ')', ']':
+			depth--
+		}
+	}
+	return depth
+}
+
+func runReplSnippet(interp *Interpreter, src string) {
+	defer func() {
+		if r := recover(); r != nil {
+			switch e := r.(type) {
+			case *runtimeError:
+				fmt.Println(e.msg)
+			case *breakSignal:
+				fmt.Println("Runtime error: 'break' outside loop")
+			case *continueSignal:
+				fmt.Println("Runtime error: 'continue' outside loop")
+			case *returnValue:
+				fmt.Println("Runtime error: 'return' outside function")
+			default:
+				panic(r)
+			}
+		}
+	}()
+	parser := NewParser(NewLexer(src).Tokenize())
+	// REPL parses per snippet: carry struct names from earlier snippets
+	for name := range interp.structNames {
+		parser.structNames[name] = true
+	}
+	prog := parser.ParseProgram()
+	for _, stmt := range prog.Statements {
+		// mini pre-pass like files get: defs register into globals
+		switch s := stmt.(type) {
+		case *StructDef:
+			interp.globalEnv.structs[s.Name] = s
+			interp.structNames[s.Name] = true
+		case *FuncDef:
+			if s.RecvType != "" {
+				if interp.globalEnv.methods[s.RecvType] == nil {
+					interp.globalEnv.methods[s.RecvType] = make(map[string]*FuncDef)
+				}
+				interp.globalEnv.methods[s.RecvType][s.Name] = s
+			} else {
+				interp.globalEnv.funcs[s.Name] = s
+			}
+		}
+		v := interp.eval(stmt, interp.globalEnv)
+		switch stmt.(type) {
+		case *VarDecl, *Assign, *FieldAssign, *IndexAssign, *FuncDef,
+			*StructDef, *ImportStmt, *BreakStmt, *ContinueStmt, *ReturnStmt,
+			*IfStatement, *WhileLoop, *ForLoop, *ForIn, *TryCatch, *DelCall:
+			// silent: declarations, assignments, control flow
+		case *FuncCall:
+			if fc, ok := stmt.(*FuncCall); ok && fc.Name == "print" {
+				break
+			}
+			fmt.Println(valueToString(v))
+		default:
+			fmt.Println(valueToString(v))
+		}
+	}
+}
+
+func repl() {
+	interp := NewInterpreter()
+	if cwd, err := os.Getwd(); err == nil {
+		interp.mainDir = cwd
+	}
+	fmt.Println("CodeX interactive — .exit quits, bad syntax ends the session")
+	var buf strings.Builder
+	for {
+		if buf.Len() == 0 {
+			fmt.Print(">> ")
+		} else {
+			fmt.Print(".. ")
+		}
+		line, err := stdinReader.ReadString('\n')
+		if err != nil {
+			fmt.Println()
+			return
+		}
+		buf.WriteString(line)
+		trimmed := strings.TrimSpace(buf.String())
+		if trimmed == ".exit" {
+			return
+		}
+		if trimmed == "" || strings.HasPrefix(trimmed, ".") {
+			buf.Reset()
+			if trimmed != "" {
+				fmt.Println("unknown command (try .exit)")
+			}
+			continue
+		}
+		if replDepth(buf.String()) > 0 {
+			continue
+		}
+		src := buf.String()
+		buf.Reset()
+		runReplSnippet(interp, src)
+	}
+}
+
+// ========== FORMATTER (codex fmt) ==========
+
+func quoteForFmt(s string) string {
+	var sb strings.Builder
+	sb.WriteRune('"')
+	for _, c := range s {
+		switch c {
+		case '"':
+			sb.WriteString("\\\"")
+		case '\\':
+			sb.WriteString("\\\\")
+		case '\n':
+			sb.WriteString("\\n")
+		case '\r':
+			sb.WriteString("\\r")
+		case '\t':
+			sb.WriteString("\\t")
+		case 0x1b:
+			sb.WriteString("\\e")
+		default:
+			sb.WriteRune(c)
+		}
+	}
+	sb.WriteRune('"')
+	return sb.String()
+}
+
+func formatSource(src string) string {
+	toks := NewLexer(src).Tokenize()
+	var sb strings.Builder
+	indent := 0
+	atStart := true
+	var prev TokenType = TOK_EOF
+	noSpaceAfter := false
+	ind := func() {
+		for i := 0; i < indent; i++ {
+			sb.WriteString("    ")
+		}
+	}
+	nextSig := func(i int) TokenType {
+		for j := i + 1; j < len(toks); j++ {
+			t := toks[j].Type
+			if t != TOK_NEWLINE && t != TOK_COMMENT && t != TOK_SEMICOLON {
+				return t
+			}
+		}
+		return TOK_EOF
+	}
+	lastChar := func() byte {
+		s := sb.String()
+		if len(s) == 0 {
+			return 0
+		}
+		return s[len(s)-1]
+	}
+	needSpace := func(cur TokenType) bool {
+		if atStart || noSpaceAfter {
+			return false
+		}
+		switch cur {
+		case TOK_RPAREN, TOK_RBRACK, TOK_DOT, TOK_COMMA, TOK_COLON:
+			return false
+		}
+		switch prev {
+		case TOK_LPAREN, TOK_LBRACK, TOK_LBRACE, TOK_DOT, TOK_NOT:
+			return false
+		}
+		if cur == TOK_LPAREN {
+			return !(prev == TOK_IDENT || prev == TOK_RPAREN || prev == TOK_RBRACK || prev == TOK_PRINT)
+		}
+		if cur == TOK_LBRACK {
+			return !(prev == TOK_IDENT || prev == TOK_NUMBER || prev == TOK_STRING ||
+				prev == TOK_RPAREN || prev == TOK_RBRACK || prev == TOK_TRUE ||
+				prev == TOK_FALSE || prev == TOK_NIL)
+		}
+		return true
+	}
+	for i := 0; i < len(toks); i++ {
+		t := toks[i]
+		switch t.Type {
+		case TOK_EOF:
+		case TOK_NEWLINE:
+			if ns := nextSig(i); ns == TOK_ELSE || ns == TOK_CATCH {
+				s := sb.String()
+				j := len(s)
+				for j > 0 && s[j-1] == ' ' {
+					j--
+				}
+				if j > 0 && s[j-1] == '}' {
+					continue
+				}
+			}
+			if lastChar() != '\n' && sb.Len() > 0 {
+				sb.WriteString("\n")
+			}
+			atStart = true
+			noSpaceAfter = false
+		case TOK_COMMENT:
+			if !atStart {
+				sb.WriteString(" ")
+			} else {
+				ind()
+			}
+			sb.WriteString("//" + t.Value)
+			atStart = false
+			noSpaceAfter = false
+		case TOK_SEMICOLON:
+			sb.WriteString("; ")
+			noSpaceAfter = true
+			atStart = false
+		case TOK_LBRACE:
+			if !atStart {
+				sb.WriteString(" ")
+			} else {
+				ind()
+			}
+			sb.WriteString("{")
+			indent++
+			atStart = false
+			noSpaceAfter = false
+		case TOK_RBRACE:
+			indent--
+			if indent < 0 {
+				indent = 0
+			}
+			if lc := lastChar(); lc != '\n' && lc != '{' && sb.Len() > 0 {
+				sb.WriteString("}")
+			} else if lc == '\n' {
+				ind()
+				sb.WriteString("}")
+			} else {
+				sb.WriteString("}")
+			}
+			atStart = false
+			noSpaceAfter = false
+			if ns := nextSig(i); ns == TOK_ELSE || ns == TOK_CATCH {
+				sb.WriteString(" ")
+			}
+		case TOK_ELSE, TOK_CATCH:
+			if atStart {
+				ind()
+			}
+			sb.WriteString(t.Value)
+			atStart = false
+			noSpaceAfter = false
+		default:
+			if atStart {
+				ind()
+			} else if needSpace(t.Type) {
+				sb.WriteString(" ")
+			}
+			if t.Type == TOK_STRING {
+				sb.WriteString(quoteForFmt(t.Value))
+			} else {
+				sb.WriteString(t.Value)
+			}
+			atStart = false
+			// unary minus and NOT glue to the next token
+			if t.Type == TOK_MINUS {
+				switch prev {
+				case TOK_EOF, TOK_LPAREN, TOK_LBRACK, TOK_COMMA, TOK_COLON,
+					TOK_ASSIGN, TOK_PLUS, TOK_MINUS, TOK_STAR, TOK_SLASH,
+					TOK_PERCENT, TOK_DIVINT, TOK_EQ, TOK_EQEQ, TOK_NEQ,
+					TOK_LT, TOK_GT, TOK_LTE, TOK_GTE, TOK_AND, TOK_OR, TOK_NOT:
+					noSpaceAfter = true
+				default:
+					noSpaceAfter = false
+				}
+			} else {
+				noSpaceAfter = false
+			}
+			if t.Type == TOK_COMMA || t.Type == TOK_COLON {
+				sb.WriteString(" ")
+				noSpaceAfter = true
+			}
+		}
+		if t.Type != TOK_NEWLINE && t.Type != TOK_COMMENT && t.Type != TOK_SEMICOLON {
+			prev = t.Type
+		}
+	}
+	out := sb.String()
+	if len(out) > 0 && out[len(out)-1] != '\n' {
+		out += "\n"
+	}
+	return out
+}
+
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Fprintf(os.Stderr, "Usage:\n  codex <file.cx> [args...]   run a script\n  codex get <user/repo[@ver]>   prefetch packages\n")
-		os.Exit(1)
+		repl()
+		return
+	}
+
+	if os.Args[1] == "fmt" {
+		if len(os.Args) < 3 {
+			fmt.Fprintf(os.Stderr, "Usage: codex fmt <file.cx>\n")
+			os.Exit(1)
+		}
+		data, err := os.ReadFile(os.Args[2])
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Ошибка чтения %s: %v\n", os.Args[2], err)
+			os.Exit(1)
+		}
+		fmt.Print(formatSource(string(data)))
+		return
 	}
 
 	if os.Args[1] == "get" {
