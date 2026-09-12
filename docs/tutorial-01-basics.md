@@ -191,5 +191,5 @@ yet — keep separate counters and reset them, work with what you have).
 
 ---
 
-*Part 2 — arrays, maps, functions and structs: we'll write a grade book.
-Parts ship one by one.*
+*Part 2 — [arrays, maps, functions and structs](tutorial-02-data.md):
+we'll write a grade book.*

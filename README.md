@@ -45,6 +45,8 @@ code and exercises:
 
 * **Part 1: basics** — first script, `print`, variables, math,
   conditions, loops ([read it](docs/tutorial-01-basics.md))
+* **Part 2: data** — arrays, maps, functions, structs, grade book
+  ([read it](docs/tutorial-02-data.md))
 
 Each snippet in the tutorials is executed against the real interpreter
 before publishing, so what you read is what runs.
