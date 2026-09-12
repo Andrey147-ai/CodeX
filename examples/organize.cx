@@ -1,0 +1,21 @@
+// File organizer: sorts a folder's files into subfolders by extension.
+// Usage: codex.exe organize.cx [dir]   (default: current dir)
+dir := "."
+if len(args()) > 0 {
+    dir = args()[0]
+}
+moved := 0
+for name in ls(dir) {
+    if !contains(name, ".") {
+        continue
+    }
+    parts := split(name, ".")
+    ext := parts[len(parts) - 1]
+    if ext == "" {
+        continue
+    }
+    mkdir(dir + "/" + ext)
+    rename(dir + "/" + name, dir + "/" + ext + "/" + name)
+    moved += 1
+}
+print("moved ", moved, " files")

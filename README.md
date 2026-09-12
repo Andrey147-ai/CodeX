@@ -236,6 +236,8 @@ In `examples/`: `raid.cx` and `shop_game.cx` (games), `inventory.cx`,
 `logstat.cx` (log analyzer, try `..\codex.exe logstat.cx app.log`),
 `methods.cx`, `stdlib.cx`, `showcase.cx`, `useimport.cx`, `badapple.cx`,
 `server.cx` (web server, try `..\codex.exe server.cx`).
+Everyday tools: `organize.cx` (sort files by extension), `todo.cx`
+(add/list/done), `backup.cx` (flat copy), `passgen.cx` (passwords).
 
 ## Building from source
 

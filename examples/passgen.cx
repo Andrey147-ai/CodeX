@@ -1,0 +1,12 @@
+// Password generator.
+// Usage: codex.exe passgen.cx [length]   (default 12)
+length := 12
+if len(args()) > 0 {
+    length = num(args()[0])
+}
+chars := "abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+pw := ""
+for i in range(length) {
+    pw += chars[randint(0, len(chars) - 1)]
+}
+print(pw)

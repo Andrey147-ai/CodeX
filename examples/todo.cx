@@ -1,0 +1,54 @@
+// Todo list in one file: add / list / done.
+// Usage:
+//   codex.exe todo.cx add "buy milk"
+//   codex.exe todo.cx list
+//   codex.exe todo.cx done 1
+file := "todo.txt"
+
+fn load() {
+    if !exists(file) {
+        return []
+    }
+    items := []
+    for line in split(read_file(file), "\n") {
+        if len(line) > 0 {
+            push(items, line)
+        }
+    }
+    return items
+}
+
+fn save(items) {
+    write_file(file, join(items, "\n") + "\n")
+}
+
+if len(args()) == 0 {
+    print("usage: add/list/done")
+} else if args()[0] == "add" {
+    items := load()
+    push(items, args()[1])
+    save(items)
+    print("added, total ", len(items))
+} else if args()[0] == "list" {
+    items := load()
+    for i in range(len(items)) {
+        print(i + 1, ") ", items[i])
+    }
+} else if args()[0] == "done" {
+    items := load()
+    n := num(args()[1]) - 1
+    if n < 0 || n >= len(items) {
+        print("no such item")
+    } else {
+        print("done: ", items[n])
+        rest := []
+        for i in range(len(items)) {
+            if i != n {
+                push(rest, items[i])
+            }
+        }
+        save(rest)
+    }
+} else {
+    print("usage: add/list/done")
+}

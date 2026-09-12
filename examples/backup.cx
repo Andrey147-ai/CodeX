@@ -1,0 +1,15 @@
+// Flat backup: copies every file from src dir into dst dir.
+// Usage: codex.exe backup.cx srcdir dstdir
+if len(args()) < 2 {
+    print("usage: backup.cx srcdir dstdir")
+} else {
+    src := args()[0]
+    dst := args()[1]
+    mkdir(dst)
+    n := 0
+    for name in ls(src) {
+        write_file(dst + "/" + name, read_file(src + "/" + name))
+        n += 1
+    }
+    print("backed up ", n, " files to ", dst)
+}
