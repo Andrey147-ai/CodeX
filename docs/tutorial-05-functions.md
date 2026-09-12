@@ -79,47 +79,38 @@ Field writes through the receiver stick to the caller's struct.
 That's what makes methods different from plain functions: they *act*
 on something.
 
-## 5. Mini-project: battle round
+## 5. Mini-project: bank account
 
 ```
-struct Enemy {
-    name
-    hp
+struct Account {
+    owner
+    balance
 }
 
-fn (e Enemy) hit(dmg) {
-    e.hp = e.hp - dmg
-    if e.hp < 0 {
-        e.hp = 0
+fn (a Account) deposit(x) {
+    a.balance = a.balance + x
+    return a.balance
+}
+
+fn (a Account) withdraw(x) {
+    if x > a.balance {
+        print("denied: not enough funds")
+        return a.balance
     }
-    return e.hp
+    a.balance = a.balance - x
+    return a.balance
 }
 
-fn alive(e) {
-    return e.hp > 0
-}
-
-boss := Enemy{"dragon", 100}
-round := 1
-while alive(boss) {
-    print("round ", round, ": ", boss.hit(30))
-    round = round + 1
-}
-print("down in ", round - 1, " rounds")
+acc := Account{"Ann", 100}
+print(acc.deposit(50))    // 150
+print(acc.withdraw(30))   // 120
+print(acc.withdraw(500))  // denied... 120
+print(acc.balance)        // 120
 ```
 
-```
-round 1: 70
-round 2: 40
-round 3: 10
-round 4: 0
-down in 4 rounds
-```
-
-(You'll also see `[del]` lines between rounds — that's `alive()`'s
-*copy* of the boss being freed after each check. The real boss lives on
-in `main`, only copies get cleaned. Method receivers like `hit` don't
-spam: they're protected for the call.)
+Two methods sharing one balance, a guard clause that refuses bad
+operations, every step returning the new state — the shape of most real
+business logic.
 
 ## 6. Test yourself
 
@@ -141,8 +132,8 @@ print(max(max(3, 9), 5))   // 9
 
 </details>
 
-**Task 2.** Give `Enemy` a `rage()` method: doubles nothing, just adds 50
-hp and returns the new hp. Call it mid-fight.
+**Task 2.** Give `Account` an `interest()` method: adds 10% to the
+balance and returns it. (`a.balance / 10` is the tenth part.)
 
 ---
 

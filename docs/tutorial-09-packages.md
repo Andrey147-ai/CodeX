@@ -84,5 +84,5 @@ then `codex get` it by its full `user/repo` path.
 
 ---
 
-*Part 10 — [capstone: shop game](tutorial-10-shop.md): we read a real
-program together, then you extend it.*
+*Part 10 — [capstone: log analyzer](tutorial-10-capstone.md): we read a
+real tool together, then you extend it.*

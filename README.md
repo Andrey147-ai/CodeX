@@ -60,8 +60,8 @@ code and exercises:
   ([read it](docs/tutorial-08-errors.md))
 * **Part 9: packages** — GitHub imports, publishing
   ([read it](docs/tutorial-09-packages.md))
-* **Part 10: capstone** — dissecting the shop game
-  ([read it](docs/tutorial-10-shop.md))
+* **Part 10: capstone** — dissecting the log analyzer
+  ([read it](docs/tutorial-10-capstone.md))
 
 Each snippet in the tutorials is executed against the real interpreter
 before publishing, so what you read is what runs.
