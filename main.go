@@ -1455,6 +1455,8 @@ type Interpreter struct {
 	importStack []string
 	structNames map[string]bool
 	frames      []string
+	assertCount int
+	noExit      bool
 }
 
 // the interpreter currently evaluating (single-threaded runtime);
@@ -1763,26 +1765,31 @@ func (interp *Interpreter) eval(node ASTNode, env *Environment) Value {
 func (interp *Interpreter) evalTopLevel(stmt ASTNode, env *Environment) (out Value) {
 	defer func() {
 		if r := recover(); r != nil {
+			msg := ""
 			switch sig := r.(type) {
 			case *breakSignal:
 				if sig.Label != "" {
-					fmt.Fprintf(os.Stderr, "Runtime error: 'break %s' outside loop\n", sig.Label)
+					msg = fmt.Sprintf("Runtime error: 'break %s' outside loop", sig.Label)
 				} else {
-					fmt.Fprintf(os.Stderr, "Runtime error: 'break' outside loop\n")
+					msg = "Runtime error: 'break' outside loop"
 				}
 			case *continueSignal:
 				if sig.Label != "" {
-					fmt.Fprintf(os.Stderr, "Runtime error: 'continue %s' outside loop\n", sig.Label)
+					msg = fmt.Sprintf("Runtime error: 'continue %s' outside loop", sig.Label)
 				} else {
-					fmt.Fprintf(os.Stderr, "Runtime error: 'continue' outside loop\n")
+					msg = "Runtime error: 'continue' outside loop"
 				}
 			case *returnValue:
-				fmt.Fprintf(os.Stderr, "Runtime error: 'return' outside function\n")
+				msg = "Runtime error: 'return' outside function"
 			case *runtimeError:
-				fmt.Fprintf(os.Stderr, "%s\n", sig.msg)
+				msg = sig.msg
 			default:
 				panic(r)
 			}
+			if interp.noExit {
+				panic(r)
+			}
+			fmt.Fprintln(os.Stderr, msg)
 			os.Exit(1)
 		}
 	}()
@@ -2483,6 +2490,22 @@ func (interp *Interpreter) evalFuncCall(call *FuncCall, env *Environment) (resul
 			fail("Runtime error: now() takes no arguments\n")
 		}
 		return Value{Kind: "number", NumVal: float64(time.Now().Unix())}
+	}
+
+	if call.Name == "assert" {
+		if len(call.Args) < 1 || len(call.Args) > 2 {
+			fail("Runtime error: assert() takes 1 or 2 arguments\n")
+		}
+		interp.assertCount++
+		cond := interp.eval(call.Args[0], env)
+		if !isTruthy(cond) {
+			if len(call.Args) == 2 {
+				msg := interp.eval(call.Args[1], env)
+				fail("Runtime error: assert failed: %s\n", valueToString(msg))
+			}
+			fail("Runtime error: assert failed\n")
+		}
+		return Value{Kind: "nil"}
 	}
 
 	if call.Name == "date" {
@@ -4073,6 +4096,91 @@ func formatSource(src string) string {
 	return out
 }
 
+// ========== TEST RUNNER (codex test) ==========
+
+// codexTest runs *_test.cx files: one target file, a directory, or "."
+// Each file gets a fresh interpreter. Returns the process exit code.
+func codexTest(target string) int {
+	var files []string
+	info, err := os.Stat(target)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "test: %v\n", err)
+		return 1
+	}
+	if !info.IsDir() {
+		files = []string{target}
+	} else {
+		entries, err := os.ReadDir(target)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "test: %v\n", err)
+			return 1
+		}
+		for _, e := range entries {
+			if !e.IsDir() && strings.HasSuffix(e.Name(), "_test.cx") {
+				files = append(files, filepath.Join(target, e.Name()))
+			}
+		}
+		sort.Strings(files)
+	}
+	if len(files) == 0 {
+		fmt.Fprintln(os.Stderr, "test: no test files")
+		return 1
+	}
+	failed := 0
+	for _, f := range files {
+		if runTestFile(f) {
+			fmt.Printf("ok %s\n", f)
+		} else {
+			failed++
+		}
+	}
+	if failed > 0 {
+		fmt.Printf("FAIL (%d/%d files)\n", failed, len(files))
+		return 1
+	}
+	fmt.Printf("ok (%d files)\n", len(files))
+	return 0
+}
+
+func runTestFile(path string) bool {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		fmt.Printf("FAIL %s: %v\n", path, err)
+		return false
+	}
+	interp := NewInterpreter()
+	activeInterp = interp
+	interp.noExit = true
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		fmt.Printf("FAIL %s: %v\n", path, err)
+		return false
+	}
+	interp.mainDir = filepath.Dir(abs)
+	ok := true
+	func() {
+		defer func() {
+			if r := recover(); r != nil {
+				switch e := r.(type) {
+				case *runtimeError:
+					fmt.Printf("FAIL %s: %s\n", path, e.msg)
+				case *breakSignal, *continueSignal, *returnValue:
+					fmt.Printf("FAIL %s: control flow outside loop/function\n", path)
+				default:
+					panic(r)
+				}
+				ok = false
+			}
+		}()
+		prog := NewParser(NewLexer(string(data)).Tokenize()).ParseProgram()
+		interp.eval(prog, interp.globalEnv)
+	}()
+	if ok && interp.assertCount == 0 {
+		fmt.Printf("WARN %s: no asserts\n", path)
+	}
+	return ok
+}
+
 func main() {
 	if len(os.Args) < 2 {
 		repl()
@@ -4091,6 +4199,14 @@ func main() {
 		}
 		fmt.Print(formatSource(string(data)))
 		return
+	}
+
+	if os.Args[1] == "test" {
+		target := "."
+		if len(os.Args) > 2 {
+			target = os.Args[2]
+		}
+		os.Exit(codexTest(target))
 	}
 
 	if os.Args[1] == "get" {

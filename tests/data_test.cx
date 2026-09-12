@@ -1,0 +1,26 @@
+// Data structures: arrays, maps, structs, JSON.
+a := [3, 1, 2]
+sort(a)
+assert(a == [1, 2, 3], "sort")
+
+m := {"b": 2}
+m["a"] = 1
+assert(keys(m) == ["a", "b"])
+assert(has(m, "a") && !has(m, "z"))
+
+struct P {
+    v
+}
+assert(P{1} == P{1})
+assert(P{1} != P{2})
+
+j := parse_json("{\"x\": [1, true, null]}")
+assert(j["x"][0] == 1)
+assert(to_json({"a": 1}) == "{\"a\":1}")
+
+total := 0
+for x in [1, 2, 3] {
+    total += x
+}
+assert(total == 6)
+assert(2 in [1, 2, 3])

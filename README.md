@@ -248,7 +248,8 @@ go build -ldflags="-s -w" -o codex.exe .
 ```
 
 Tests and style: `go vet ./...` must pass, and every push is checked by
-GitHub Actions on Ubuntu + Windows.
+GitHub Actions on Ubuntu + Windows. CodeX tests itself too:
+`codex.exe test tests` runs `*_test.cx` files with `assert()`.
 
 ## 🗺️ Roadmap
 

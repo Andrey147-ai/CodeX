@@ -40,3 +40,7 @@ jobs:
         run: |
           ../codex${{ runner.os == 'Windows' && '.exe' || '' }} logstat.cx app.log
           ../codex${{ runner.os == 'Windows' && '.exe' || '' }} useimport.cx
+
+      - name: Unit tests
+        shell: bash
+        run: ./codex${{ runner.os == 'Windows' && '.exe' || '' }} test tests
