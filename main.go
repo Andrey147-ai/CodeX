@@ -506,6 +506,13 @@ type FuncDef struct {
 
 func (f *FuncDef) isASTNode() {}
 
+type FuncLit struct {
+	Params []string
+	Body   []ASTNode
+}
+
+func (f *FuncLit) isASTNode() {}
+
 type ReturnStmt struct{ Value ASTNode }
 
 func (r *ReturnStmt) isASTNode() {}
@@ -730,14 +737,49 @@ func (p *Parser) parseStructDef() ASTNode {
 func (p *Parser) parseFuncDef() ASTNode {
 	p.expect(TOK_FN)
 	fn := &FuncDef{}
-	// метод: fn (recv Type) name(params)
+	// fn (recv Type) name(...) — метод; fn (...) — анонимная функция
 	if p.peek().Type == TOK_LPAREN {
-		p.next()
-		fn.RecvName = p.expect(TOK_IDENT).Value
-		fn.RecvType = p.expect(TOK_IDENT).Value
-		p.expect(TOK_RPAREN)
+		if p.isMethodReceiver() {
+			p.next()
+			fn.RecvName = p.expect(TOK_IDENT).Value
+			fn.RecvType = p.expect(TOK_IDENT).Value
+			p.expect(TOK_RPAREN)
+		} else {
+			params, body := p.parseFnRemainder()
+			return &FuncLit{Params: params, Body: body}
+		}
 	}
 	fn.Name = p.expect(TOK_IDENT).Value
+	params, body := p.parseFnRemainder()
+	fn.Params = params
+	fn.Body = body
+	return fn
+}
+
+// isMethodReceiver checks '(' IDENT IDENT ')' — receiver vs plain params.
+func (p *Parser) isMethodReceiver() bool {
+	idx := p.pos + 1
+	for idx < len(p.tokens) && p.tokens[idx].Type == TOK_NEWLINE {
+		idx++
+	}
+	if idx >= len(p.tokens) || p.tokens[idx].Type != TOK_IDENT {
+		return false
+	}
+	idx++
+	for idx < len(p.tokens) && p.tokens[idx].Type == TOK_NEWLINE {
+		idx++
+	}
+	if idx >= len(p.tokens) || p.tokens[idx].Type != TOK_IDENT {
+		return false
+	}
+	idx++
+	for idx < len(p.tokens) && p.tokens[idx].Type == TOK_NEWLINE {
+		idx++
+	}
+	return idx < len(p.tokens) && p.tokens[idx].Type == TOK_RPAREN
+}
+
+func (p *Parser) parseFnRemainder() ([]string, []ASTNode) {
 	p.expect(TOK_LPAREN)
 	var params []string
 	for p.peek().Type != TOK_RPAREN && p.peek().Type != TOK_EOF {
@@ -753,9 +795,7 @@ func (p *Parser) parseFuncDef() ASTNode {
 		body = append(body, p.parseStatement())
 	}
 	p.expect(TOK_RBRACE)
-	fn.Params = params
-	fn.Body = body
-	return fn
+	return params, body
 }
 
 func (p *Parser) parseIf() ASTNode {
@@ -1096,6 +1136,9 @@ func (p *Parser) parsePrimary() ASTNode {
 		p.next()
 		return &BoolLiteral{Value: true}
 	}
+	if tok.Type == TOK_FN {
+		return p.parseFuncDef()
+	}
 	if tok.Type == TOK_FALSE {
 		p.next()
 		return &BoolLiteral{Value: false}
@@ -1205,6 +1248,8 @@ type Value struct {
 	MapVal   map[string]Value
 	Fields   map[string]Value
 	TypeName string
+	Fn       *FuncDef
+	Closure  *Environment
 }
 
 type Environment struct {
@@ -1485,6 +1530,9 @@ func (interp *Interpreter) eval(node ASTNode, env *Environment) Value {
 
 	case *FuncDef:
 		return Value{Kind: "nil"}
+
+	case *FuncLit:
+		return Value{Kind: "func", Fn: &FuncDef{Params: n.Params, Body: n.Body}, Closure: env}
 
 	case *StructLiteral:
 		var current = env
@@ -2164,21 +2212,41 @@ func (interp *Interpreter) evalFuncCall(call *FuncCall, env *Environment) (resul
 		return Value{Kind: "string", StrVal: dest}
 	}
 
+	// variable holding a function value (first-class functions, closures)?
+	if v, found := env.getVar(call.Name); found && v.Kind == "func" {
+		argVals := make([]Value, 0, len(call.Args))
+		for _, a := range call.Args {
+			argVals = append(argVals, interp.eval(a, env))
+		}
+		return interp.invokeUserFunc(v.Fn, v.Closure, argVals, call.Name)
+	}
+
 	fn, ok := env.getFunc(call.Name)
 	if !ok {
 		fail("Runtime error: undefined function '%s'\n", call.Name)
 	}
 
-	fnEnv := NewEnvironment(interp.globalEnv)
+	argVals := make([]Value, 0, len(call.Args))
+	for _, a := range call.Args {
+		argVals = append(argVals, interp.eval(a, env))
+	}
+	return interp.invokeUserFunc(fn, interp.globalEnv, argVals, call.Name)
+}
+
+// invokeUserFunc runs a user function body in a fresh frame parented at
+// frameParent (global scope for plain functions, captured scope for
+// closures). Shared by plain calls, function values and methods.
+func (interp *Interpreter) invokeUserFunc(fn *FuncDef, frameParent *Environment, argVals []Value, callerName string) (result Value) {
+	fnEnv := NewEnvironment(frameParent)
 	for i, param := range fn.Params {
-		if i < len(call.Args) {
-			fnEnv.setVar(param, interp.eval(call.Args[i], env))
+		if i < len(argVals) {
+			fnEnv.setVar(param, argVals[i])
 		} else {
 			fnEnv.setVar(param, Value{Kind: "nil"})
 		}
 	}
 
-	interp.currentFn = call.Name
+	interp.currentFn = callerName
 
 	defer func() {
 		if r := recover(); r != nil {
@@ -2661,6 +2729,8 @@ func valuesEqual(a, b Value) bool {
 		return a.StrVal == b.StrVal
 	case "nil":
 		return true
+	case "func":
+		return a.Fn == b.Fn
 	default:
 		return false
 	}
@@ -2680,6 +2750,9 @@ func isTruthy(v Value) bool {
 		return true
 	}
 	if v.Kind == "map" && len(v.MapVal) > 0 {
+		return true
+	}
+	if v.Kind == "func" {
 		return true
 	}
 	return false
@@ -3000,6 +3073,11 @@ func valueToString(v Value) string {
 		return "false"
 	case "string":
 		return v.StrVal
+	case "func":
+		if v.Fn != nil && v.Fn.Name != "" {
+			return "<fn " + v.Fn.Name + ">"
+		}
+		return "<fn>"
 	case "array":
 		parts := make([]string, 0, len(v.Items))
 		for _, item := range v.Items {

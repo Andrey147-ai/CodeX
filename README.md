@@ -124,6 +124,18 @@ fn (p Player) heal(x) {
 p := Player{"hero", 50}
 p.heal(30)
 
+// functions are values: literals, higher-order calls, closures
+double := fn(x) {
+    return x * 2
+}
+fn makeAdder(n) {
+    return fn(x) {
+        return x + n
+    }
+}
+add5 := makeAdder(5)
+print(add5(100))   // 105
+
 // packages from GitHub, no registry needed
 import "./mylib.cx"
 import "Andrey147-ai/strutils@v1.2.0"
@@ -207,7 +219,7 @@ GitHub Actions on Ubuntu + Windows.
 Done so far — comparisons and logic, correct precedence, `while` /
 `for` / `for-in` with `break` / `continue`, arrays, dictionaries,
 struct methods, files, HTTP, packages, terminal control, `%` / `div`,
-slices. Up next:
+slices, first-class functions and closures. Up next:
 
 * [ ] Built-in lightweight networking library for backends (`http_listen`)
 * [ ] Your idea — open an issue
