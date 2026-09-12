@@ -21,6 +21,9 @@ import (
 	"unicode"
 )
 
+// codexVersion is printed by `codex version`. Bump on release.
+const codexVersion = "v0.22.0"
+
 // ========== LEXER ==========
 
 type TokenType int
@@ -771,7 +774,7 @@ func (p *Parser) parseStatement() ASTNode {
 			// составное присваивание: x += 1 → x = x + 1
 			if p.tokens[idx].Type == TOK_PLUS || p.tokens[idx].Type == TOK_MINUS ||
 				p.tokens[idx].Type == TOK_STAR || p.tokens[idx].Type == TOK_SLASH ||
-				p.tokens[idx].Type == TOK_PERCENT {
+				p.tokens[idx].Type == TOK_PERCENT || p.tokens[idx].Type == TOK_DIVINT {
 				j := idx + 1
 				for j < len(p.tokens) && (p.tokens[j].Type == TOK_NEWLINE || p.tokens[j].Type == TOK_COMMENT) {
 					j++
@@ -3022,8 +3025,7 @@ func (interp *Interpreter) invokeUserFunc(fn *FuncDef, frameParent *Environment,
 	return result
 }
 
-// ========== PACKAGES (GitHub) ==========
-//
+// ========== PACKAGES (GitHub) ==========//
 // import "user/repo"            -> latest main branch, entry main.cx
 // import "user/repo@v1.2.0"     -> tag or branch v1.2.0
 // import "user/repo/lib/a.cx"   -> explicit file inside the repo
@@ -3408,6 +3410,10 @@ func (interp *Interpreter) evalBinaryOp(left Value, op string, right Value) Valu
 	if op == "||" {
 		return Value{Kind: "bool", BoolVal: isTruthy(left) || isTruthy(right)}
 	}
+	// + со строкой склеивает всё (числа, булевы, массивы через печать)
+	if op == "+" && (left.Kind == "string" || right.Kind == "string") {
+		return Value{Kind: "string", StrVal: valueToString(left) + valueToString(right)}
+	}
 	// равенство работает для number/string/bool/nil
 	if op == "==" || op == "!=" {
 		eq := valuesEqual(left, right)
@@ -3475,8 +3481,6 @@ func (interp *Interpreter) evalBinaryOp(left Value, op string, right Value) Valu
 	}
 	if left.Kind == "string" && right.Kind == "string" {
 		switch op {
-		case "+":
-			return Value{Kind: "string", StrVal: left.StrVal + right.StrVal}
 		case "<":
 			return Value{Kind: "bool", BoolVal: left.StrVal < right.StrVal}
 		case ">":
@@ -4332,6 +4336,11 @@ func runTestFile(path string) bool {
 func main() {
 	if len(os.Args) < 2 {
 		repl()
+		return
+	}
+
+	if os.Args[1] == "version" || os.Args[1] == "--version" {
+		fmt.Println("CodeX " + codexVersion)
 		return
 	}
 
