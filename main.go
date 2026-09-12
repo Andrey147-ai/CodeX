@@ -16,6 +16,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 	"unicode"
 )
@@ -1388,6 +1389,8 @@ type Value struct {
 	TypeName string
 	Fn       *FuncDef
 	Closure  *Environment
+	Ch       chan Value
+	TaskCh   chan Value
 }
 
 type Environment struct {
@@ -1462,6 +1465,9 @@ type Interpreter struct {
 // the interpreter currently evaluating (single-threaded runtime);
 // fail() reads its call stack for catchable error messages.
 var activeInterp *Interpreter
+
+// framesMu guards call-stack access: spawned tasks share the process.
+var framesMu sync.Mutex
 
 func NewInterpreter() *Interpreter {
 	return &Interpreter{
@@ -1831,11 +1837,48 @@ func fail(format string, args ...interface{}) {
 	msg := fmt.Sprintf(format, args...)
 	msg = strings.TrimSuffix(msg, "\n")
 	if activeInterp != nil {
-		for _, f := range activeInterp.frames {
+		framesMu.Lock()
+		frames := append([]string(nil), activeInterp.frames...)
+		framesMu.Unlock()
+		for _, f := range frames {
 			msg += "\n  at " + f
 		}
 	}
 	panic(&runtimeError{msg: msg})
+}
+
+// copyValue deep-copies containers across task/channel boundaries so
+// concurrent tasks never share backing memory. Functions are shared
+// (their AST is immutable).
+func copyValue(v Value, depth int) Value {
+	if depth > 100 {
+		return Value{Kind: "nil"}
+	}
+	switch v.Kind {
+	case "array":
+		items := make([]Value, len(v.Items))
+		for i, item := range v.Items {
+			items[i] = copyValue(item, depth+1)
+		}
+		v.Items = items
+		return v
+	case "map":
+		m := make(map[string]Value, len(v.MapVal))
+		for k, item := range v.MapVal {
+			m[k] = copyValue(item, depth+1)
+		}
+		v.MapVal = m
+		return v
+	case "struct":
+		f := make(map[string]Value, len(v.Fields))
+		for k, item := range v.Fields {
+			f[k] = copyValue(item, depth+1)
+		}
+		v.Fields = f
+		return v
+	default:
+		return v
+	}
 }
 
 func (interp *Interpreter) evalFor(node *ForLoop, env *Environment) Value {
@@ -2019,6 +2062,8 @@ func (interp *Interpreter) evalFuncCall(call *FuncCall, env *Environment) (resul
 			return Value{Kind: "number", NumVal: float64(len(v.Items))}
 		case "map":
 			return Value{Kind: "number", NumVal: float64(len(v.MapVal))}
+		case "channel":
+			return Value{Kind: "number", NumVal: float64(len(v.Ch))}
 		case "string":
 			return Value{Kind: "number", NumVal: float64(len([]rune(v.StrVal)))}
 		default:
@@ -2765,6 +2810,98 @@ func (interp *Interpreter) evalFuncCall(call *FuncCall, env *Environment) (resul
 		}}
 	}
 
+	if call.Name == "channel" {
+		if len(call.Args) > 1 {
+			fail("Runtime error: channel() takes at most 1 argument (capacity)\n")
+		}
+		capacity := 0
+		if len(call.Args) == 1 {
+			c := interp.eval(call.Args[0], env)
+			if c.Kind != "number" || c.NumVal < 0 || c.NumVal != math.Trunc(c.NumVal) {
+				fail("Runtime error: channel() capacity must be a non-negative integer\n")
+			}
+			capacity = int(c.NumVal)
+		}
+		return Value{Kind: "channel", Ch: make(chan Value, capacity)}
+	}
+
+	if call.Name == "send" {
+		if len(call.Args) != 2 {
+			fail("Runtime error: send() takes exactly 2 arguments\n")
+		}
+		ch := interp.eval(call.Args[0], env)
+		if ch.Kind != "channel" {
+			fail("Runtime error: send() needs a channel, got %s\n", ch.Kind)
+		}
+		ch.Ch <- copyValue(interp.eval(call.Args[1], env), 0)
+		return Value{Kind: "nil"}
+	}
+
+	if call.Name == "recv" {
+		if len(call.Args) != 1 {
+			fail("Runtime error: recv() takes exactly 1 argument\n")
+		}
+		ch := interp.eval(call.Args[0], env)
+		if ch.Kind != "channel" {
+			fail("Runtime error: recv() needs a channel, got %s\n", ch.Kind)
+		}
+		return <-ch.Ch
+	}
+
+	if call.Name == "spawn" {
+		if len(call.Args) < 1 {
+			fail("Runtime error: spawn() takes a function and optional args\n")
+		}
+		fnVal := interp.eval(call.Args[0], env)
+		if fnVal.Kind != "func" {
+			fail("Runtime error: spawn() needs a function, got %s\n", fnVal.Kind)
+		}
+		argVals := make([]Value, 0, len(call.Args)-1)
+		for _, a := range call.Args[1:] {
+			argVals = append(argVals, copyValue(interp.eval(a, env), 0))
+		}
+		// Isolated interpreter: registries copied (AST is immutable),
+		// variables NOT shared — everything crosses via args/channels.
+		// Define functions before spawning; nested defs during flight race.
+		child := NewInterpreter()
+		child.mainDir = interp.mainDir
+		for k, v := range interp.globalEnv.funcs {
+			child.globalEnv.funcs[k] = v
+		}
+		for k, v := range interp.globalEnv.structs {
+			child.globalEnv.structs[k] = v
+		}
+		for k, v := range interp.globalEnv.methods {
+			child.globalEnv.methods[k] = v
+		}
+		done := make(chan Value, 1)
+		fnDef := fnVal.Fn
+		go func() {
+			defer func() {
+				if r := recover(); r != nil {
+					msg := "task crash"
+					if re, ok := r.(*runtimeError); ok {
+						msg = re.msg
+					}
+					done <- Value{Kind: "string", StrVal: "task error: " + msg}
+				}
+			}()
+			done <- child.invokeUserFunc(fnDef, child.globalEnv, argVals, "spawn")
+		}()
+		return Value{Kind: "task", TaskCh: done}
+	}
+
+	if call.Name == "wait" {
+		if len(call.Args) != 1 {
+			fail("Runtime error: wait() takes exactly 1 argument\n")
+		}
+		t := interp.eval(call.Args[0], env)
+		if t.Kind != "task" {
+			fail("Runtime error: wait() needs a task, got %s\n", t.Kind)
+		}
+		return <-t.TaskCh
+	}
+
 	if call.Name == "parse_json" {
 		if len(call.Args) != 1 {
 			fail("Runtime error: parse_json() takes exactly 1 argument\n")
@@ -2844,9 +2981,13 @@ func (interp *Interpreter) evalFuncCall(call *FuncCall, env *Environment) (resul
 // closures). Shared by plain calls, function values and methods.
 func (interp *Interpreter) invokeUserFunc(fn *FuncDef, frameParent *Environment, argVals []Value, callerName string) (result Value) {
 	fnEnv := NewEnvironment(frameParent)
+	framesMu.Lock()
 	interp.frames = append(interp.frames, callerName)
+	framesMu.Unlock()
 	defer func() {
+		framesMu.Lock()
 		interp.frames = interp.frames[:len(interp.frames)-1]
+		framesMu.Unlock()
 	}()
 	for i, param := range fn.Params {
 		if i < len(argVals) {
@@ -3428,6 +3569,9 @@ func isTruthy(v Value) bool {
 	if v.Kind == "func" {
 		return true
 	}
+	if v.Kind == "channel" || v.Kind == "task" {
+		return true
+	}
 	return false
 }
 
@@ -3751,6 +3895,10 @@ func valueToString(v Value) string {
 			return "<fn " + v.Fn.Name + ">"
 		}
 		return "<fn>"
+	case "channel":
+		return "<channel>"
+	case "task":
+		return "<task>"
 	case "array":
 		parts := make([]string, 0, len(v.Items))
 		for _, item := range v.Items {

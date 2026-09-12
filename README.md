@@ -199,6 +199,9 @@ import "Andrey147-ai/strutils@v1.2.0"
 | `range(a, b)` | Number array | `range(3)` → `[0,1,2]` |
 | `map/filter/each` | Higher-order over arrays | `map(a, fn(x){return x*2})` |
 | `run(prog, args)` | Run a program | `run("go", ["version"])` |
+| `assert(cond)` | Test assertion | `assert(a == b, "math")` |
+| `channel(n)` / `send` / `recv` | Message passing | `send(ch, 42)` |
+| `spawn(f, args)` / `wait(t)` | Background tasks | `wait(spawn(f, 9))` |
 | `switch/case/else` | Multi-branch | `switch x { case 1: {...} }` |
 | `name: loop` + `break name` | Labeled loop control | `break outer` |
 | `ls/mkdir/remove/rename` | More file ops | `ls(".")` |
