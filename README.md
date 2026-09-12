@@ -154,6 +154,8 @@ import "Andrey147-ai/strutils@v1.2.0"
 | `http_get(url)` | Fetch URL body | `http_get("https://example.com")` |
 | `sleep(ms)` | Millisecond pause | `sleep(50)` |
 | `pkgdir(spec)` | Local path of a GitHub repo | `pkgdir("user/data")` |
+| `a div b`, `a % b` | Integer division, modulo | `7 div 2` → `3`, `7 % 3` → `1` |
+| `x[i:j]` | Slices (strings/arrays, negatives ok) | `"hello"[1:4]` → `"ell"` |
 | `del(x)` | Manual scope cleanup | `del(b)` |
 
 ## 📦 Packages (GitHub)
@@ -198,7 +200,8 @@ GitHub Actions on Ubuntu + Windows.
 
 Done so far — comparisons and logic, correct precedence, `while` /
 `for` / `for-in` with `break` / `continue`, arrays, dictionaries,
-struct methods, files, HTTP, packages, terminal control. Up next:
+struct methods, files, HTTP, packages, terminal control, `%` / `div`,
+slices. Up next:
 
 * [ ] Built-in lightweight networking library for backends (`http_listen`)
 * [ ] Your idea — open an issue

@@ -68,6 +68,8 @@ const (
 	TOK_RBRACK
 	TOK_IN
 	TOK_IMPORT
+	TOK_PERCENT
+	TOK_DIVINT
 )
 
 type Token struct {
@@ -204,6 +206,8 @@ func (l *Lexer) Tokenize() []Token {
 				typ = TOK_FOR
 			case "in":
 				typ = TOK_IN
+			case "div":
+				typ = TOK_DIVINT
 			case "import":
 				typ = TOK_IMPORT
 			}
@@ -272,6 +276,9 @@ func (l *Lexer) Tokenize() []Token {
 			l.advancePos(1)
 		case '*':
 			l.push(TOK_STAR, "*")
+			l.advancePos(1)
+		case '%':
+			l.push(TOK_PERCENT, "%")
 			l.advancePos(1)
 		case '/':
 			l.push(TOK_SLASH, "/")
@@ -437,6 +444,14 @@ type IndexAssign struct {
 }
 
 func (i *IndexAssign) isASTNode() {}
+
+type SliceAccess struct {
+	Target ASTNode
+	Start  ASTNode
+	End    ASTNode
+}
+
+func (s *SliceAccess) isASTNode() {}
 
 type MethodCall struct {
 	Receiver ASTNode
@@ -623,9 +638,7 @@ func (p *Parser) parseStatement() ASTNode {
 			for {
 				if p.peek().Type == TOK_LBRACK {
 					p.next()
-					index := p.parseExpr()
-					p.expect(TOK_RBRACK)
-					target = &IndexAccess{Target: target, Index: index}
+					target = p.parseIndexOrSliceTarget(target)
 				} else if p.peek().Type == TOK_DOT {
 					p.next()
 					field := p.expect(TOK_IDENT).Value
@@ -938,7 +951,7 @@ func (p *Parser) parseAdd() ASTNode {
 
 func (p *Parser) parseMul() ASTNode {
 	left := p.parseUnary()
-	for p.peek().Type == TOK_STAR || p.peek().Type == TOK_SLASH {
+	for p.peek().Type == TOK_STAR || p.peek().Type == TOK_SLASH || p.peek().Type == TOK_PERCENT || p.peek().Type == TOK_DIVINT {
 		opTok := p.next()
 		right := p.parseUnary()
 		left = &BinaryOp{Left: left, Op: opTok.Value, Right: right}
@@ -969,9 +982,7 @@ func (p *Parser) parseUnary() ASTNode {
 		}
 		if p.peekRaw().Type == TOK_LBRACK {
 			p.next()
-			index := p.parseExpr()
-			p.expect(TOK_RBRACK)
-			node = &IndexAccess{Target: node, Index: index}
+			node = p.parseIndexOrSlice(node)
 			continue
 		}
 		// вызов метода: obj.method(args)
@@ -995,6 +1006,41 @@ func (p *Parser) parseUnary() ASTNode {
 		break
 	}
 	return node
+}
+
+// parseIndexOrSlice parses the rest of [...] after '[' was consumed:
+// a[i] (index) or a[start:end] (slice, either side omittable).
+func (p *Parser) parseIndexOrSlice(target ASTNode) ASTNode {
+	var start, end ASTNode
+	if p.peek().Type != TOK_COLON {
+		start = p.parseExpr()
+	}
+	if p.peek().Type == TOK_COLON {
+		p.next()
+		if p.peek().Type != TOK_RBRACK {
+			end = p.parseExpr()
+		}
+		p.expect(TOK_RBRACK)
+		return &SliceAccess{Target: target, Start: start, End: end}
+	}
+	p.expect(TOK_RBRACK)
+	return &IndexAccess{Target: target, Index: start}
+}
+
+// parseIndexOrSliceTarget is the assignment-target twin: slices are
+// read-only, so a[i:j] = v is a clean error instead of weird behavior.
+func (p *Parser) parseIndexOrSliceTarget(target ASTNode) ASTNode {
+	var start ASTNode
+	if p.peek().Type != TOK_COLON {
+		start = p.parseExpr()
+	}
+	if p.peek().Type == TOK_COLON {
+		tok := p.peek()
+		fmt.Fprintf(os.Stderr, "Parser error at %d:%d: slice assignment is not supported\n", tok.Line, tok.Col)
+		os.Exit(1)
+	}
+	p.expect(TOK_RBRACK)
+	return &IndexAccess{Target: target, Index: start}
 }
 
 func (p *Parser) parsePrimary() ASTNode {
@@ -1362,6 +1408,23 @@ func (interp *Interpreter) eval(node ASTNode, env *Environment) Value {
 		cont.Items[interp.evalArrayIndex(n.Index, env, len(cont.Items))] = val
 		return val
 
+	case *SliceAccess:
+		cont := interp.eval(n.Target, env)
+		switch cont.Kind {
+		case "array":
+			s, e := interp.evalSliceBounds(n.Start, n.End, env, len(cont.Items))
+			out := make([]Value, 0, e-s)
+			out = append(out, cont.Items[s:e]...)
+			return Value{Kind: "array", Items: out}
+		case "string":
+			runes := []rune(cont.StrVal)
+			s, e := interp.evalSliceBounds(n.Start, n.End, env, len(runes))
+			return Value{Kind: "string", StrVal: string(runes[s:e])}
+		default:
+			fmt.Fprintf(os.Stderr, "Runtime error: slicing %s\n", cont.Kind)
+			os.Exit(1)
+		}
+
 	case *BreakStmt:
 		panic(&breakSignal{})
 
@@ -1557,11 +1620,48 @@ func (interp *Interpreter) evalArrayIndex(node ASTNode, env *Environment, length
 		os.Exit(1)
 	}
 	i := int(v.NumVal)
+	if i < 0 {
+		i += length
+	}
 	if i < 0 || i >= length {
-		fmt.Fprintf(os.Stderr, "Runtime error: index %d out of range (len %d)\n", i, length)
+		fmt.Fprintf(os.Stderr, "Runtime error: index %d out of range (len %d)\n", int(v.NumVal), length)
 		os.Exit(1)
 	}
 	return i
+}
+
+func (interp *Interpreter) evalSliceBounds(start, end ASTNode, env *Environment, length int) (int, int) {
+	bound := func(node ASTNode, def int) int {
+		if node == nil {
+			return def
+		}
+		v := interp.eval(node, env)
+		if v.Kind != "number" {
+			fmt.Fprintf(os.Stderr, "Runtime error: slice bound must be a number, got %s\n", v.Kind)
+			os.Exit(1)
+		}
+		if v.NumVal != math.Trunc(v.NumVal) {
+			fmt.Fprintf(os.Stderr, "Runtime error: slice bound must be an integer\n")
+			os.Exit(1)
+		}
+		i := int(v.NumVal)
+		if i < 0 {
+			i += length
+		}
+		if i < 0 {
+			i = 0
+		}
+		if i > length {
+			i = length
+		}
+		return i
+	}
+	s := bound(start, 0)
+	e := bound(end, length)
+	if s > e {
+		return s, s
+	}
+	return s, e
 }
 
 func (interp *Interpreter) evalWhile(node *WhileLoop, env *Environment) Value {
@@ -2422,6 +2522,18 @@ func (interp *Interpreter) evalBinaryOp(left Value, op string, right Value) Valu
 				os.Exit(1)
 			}
 			return Value{Kind: "number", NumVal: left.NumVal / right.NumVal}
+		case "%":
+			if right.NumVal == 0 {
+				fmt.Fprintf(os.Stderr, "Runtime error: modulo by zero\n")
+				os.Exit(1)
+			}
+			return Value{Kind: "number", NumVal: math.Mod(left.NumVal, right.NumVal)}
+		case "div":
+			if right.NumVal == 0 {
+				fmt.Fprintf(os.Stderr, "Runtime error: integer division by zero\n")
+				os.Exit(1)
+			}
+			return Value{Kind: "number", NumVal: math.Trunc(left.NumVal / right.NumVal)}
 		case "<":
 			return Value{Kind: "bool", BoolVal: left.NumVal < right.NumVal}
 		case ">":
