@@ -8,8 +8,10 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"math/rand"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -1502,6 +1504,10 @@ func (interp *Interpreter) eval(node ASTNode, env *Environment) Value {
 			}
 			return val
 		}
+		if cont.Kind == "string" {
+			runes := []rune(cont.StrVal)
+			return Value{Kind: "string", StrVal: string(runes[interp.evalArrayIndex(n.Index, env, len(runes))])}
+		}
 		if cont.Kind != "array" {
 			fail("Runtime error: indexing non-array (%s)\n", cont.Kind)
 		}
@@ -1514,6 +1520,9 @@ func (interp *Interpreter) eval(node ASTNode, env *Environment) Value {
 			key := interp.evalMapKey(n.Index, env)
 			cont.MapVal[key] = val
 			return val
+		}
+		if cont.Kind == "string" {
+			fail("Runtime error: strings are immutable\n")
 		}
 		if cont.Kind != "array" {
 			fail("Runtime error: indexing non-array (%s)\n", cont.Kind)
@@ -2247,6 +2256,181 @@ func (interp *Interpreter) evalFuncCall(call *FuncCall, env *Environment) (resul
 			fail("Runtime error: now() takes no arguments\n")
 		}
 		return Value{Kind: "number", NumVal: float64(time.Now().Unix())}
+	}
+
+	if call.Name == "rand" {
+		if len(call.Args) != 0 {
+			fail("Runtime error: rand() takes no arguments\n")
+		}
+		return Value{Kind: "number", NumVal: rand.Float64()}
+	}
+
+	if call.Name == "randint" {
+		if len(call.Args) != 2 {
+			fail("Runtime error: randint() takes exactly 2 arguments\n")
+		}
+		lo := interp.eval(call.Args[0], env)
+		hi := interp.eval(call.Args[1], env)
+		if lo.Kind != "number" || hi.Kind != "number" {
+			fail("Runtime error: randint() needs numbers\n")
+		}
+		a, b := int(math.Trunc(lo.NumVal)), int(math.Trunc(hi.NumVal))
+		if b < a {
+			fail("Runtime error: randint() max < min\n")
+		}
+		return Value{Kind: "number", NumVal: float64(a + rand.Intn(b-a+1))}
+	}
+
+	if call.Name == "seed" {
+		if len(call.Args) != 1 {
+			fail("Runtime error: seed() takes exactly 1 argument\n")
+		}
+		s := interp.eval(call.Args[0], env)
+		if s.Kind != "number" {
+			fail("Runtime error: seed() needs a number\n")
+		}
+		rand.Seed(int64(s.NumVal))
+		return Value{Kind: "nil"}
+	}
+
+	if call.Name == "abs" || call.Name == "sqrt" || call.Name == "floor" || call.Name == "ceil" || call.Name == "round" {
+		if len(call.Args) != 1 {
+			fail("Runtime error: %s() takes exactly 1 argument\n", call.Name)
+		}
+		v := interp.eval(call.Args[0], env)
+		if v.Kind != "number" {
+			fail("Runtime error: %s() needs a number, got %s\n", call.Name, v.Kind)
+		}
+		switch call.Name {
+		case "abs":
+			return Value{Kind: "number", NumVal: math.Abs(v.NumVal)}
+		case "sqrt":
+			if v.NumVal < 0 {
+				fail("Runtime error: sqrt() of negative\n")
+			}
+			return Value{Kind: "number", NumVal: math.Sqrt(v.NumVal)}
+		case "floor":
+			return Value{Kind: "number", NumVal: math.Floor(v.NumVal)}
+		case "ceil":
+			return Value{Kind: "number", NumVal: math.Ceil(v.NumVal)}
+		default:
+			return Value{Kind: "number", NumVal: math.Round(v.NumVal)}
+		}
+	}
+
+	if call.Name == "pow" || call.Name == "min" || call.Name == "max" {
+		if len(call.Args) != 2 {
+			fail("Runtime error: %s() takes exactly 2 arguments\n", call.Name)
+		}
+		a := interp.eval(call.Args[0], env)
+		b := interp.eval(call.Args[1], env)
+		if a.Kind != "number" || b.Kind != "number" {
+			fail("Runtime error: %s() needs numbers\n", call.Name)
+		}
+		switch call.Name {
+		case "pow":
+			return Value{Kind: "number", NumVal: math.Pow(a.NumVal, b.NumVal)}
+		case "min":
+			return Value{Kind: "number", NumVal: math.Min(a.NumVal, b.NumVal)}
+		default:
+			return Value{Kind: "number", NumVal: math.Max(a.NumVal, b.NumVal)}
+		}
+	}
+
+	if call.Name == "range" {
+		if len(call.Args) != 1 && len(call.Args) != 2 {
+			fail("Runtime error: range() takes 1 or 2 arguments\n")
+		}
+		bounds := []int{}
+		for _, a := range call.Args {
+			v := interp.eval(a, env)
+			if v.Kind != "number" || v.NumVal != math.Trunc(v.NumVal) {
+				fail("Runtime error: range() needs integers\n")
+			}
+			bounds = append(bounds, int(v.NumVal))
+		}
+		lo, hi := 0, bounds[0]
+		if len(bounds) == 2 {
+			lo, hi = bounds[0], bounds[1]
+		}
+		items := []Value{}
+		for i := lo; i < hi; i++ {
+			items = append(items, Value{Kind: "number", NumVal: float64(i)})
+		}
+		return Value{Kind: "array", Items: items}
+	}
+
+	if call.Name == "map" || call.Name == "filter" || call.Name == "each" {
+		if len(call.Args) != 2 {
+			fail("Runtime error: %s() takes exactly 2 arguments (array, function)\n", call.Name)
+		}
+		arr := interp.eval(call.Args[0], env)
+		fnVal := interp.eval(call.Args[1], env)
+		if arr.Kind != "array" {
+			fail("Runtime error: %s() needs an array, got %s\n", call.Name, arr.Kind)
+		}
+		if fnVal.Kind != "func" {
+			fail("Runtime error: %s() needs a function, got %s\n", call.Name, fnVal.Kind)
+		}
+		closure := fnVal.Closure
+		if closure == nil {
+			closure = interp.globalEnv
+		}
+		out := []Value{}
+		for _, item := range arr.Items {
+			r := interp.invokeUserFunc(fnVal.Fn, closure, []Value{item}, call.Name)
+			if call.Name == "filter" {
+				if isTruthy(r) {
+					out = append(out, item)
+				}
+			} else if call.Name == "map" {
+				out = append(out, r)
+			}
+		}
+		if call.Name == "each" {
+			return Value{Kind: "nil"}
+		}
+		return Value{Kind: "array", Items: out}
+	}
+
+	if call.Name == "run" {
+		if len(call.Args) < 1 || len(call.Args) > 2 {
+			fail("Runtime error: run() takes a program and optional args array\n")
+		}
+		prog := interp.eval(call.Args[0], env)
+		if prog.Kind != "string" {
+			fail("Runtime error: run() program must be a string, got %s\n", prog.Kind)
+		}
+		var argv []string
+		if len(call.Args) == 2 {
+			a := interp.eval(call.Args[1], env)
+			if a.Kind != "array" {
+				fail("Runtime error: run() args must be an array, got %s\n", a.Kind)
+			}
+			for _, item := range a.Items {
+				if item.Kind != "string" {
+					fail("Runtime error: run() args must be strings\n")
+				}
+				argv = append(argv, item.StrVal)
+			}
+		}
+		cmd := exec.Command(prog.StrVal, argv...)
+		var stdout, stderr bytes.Buffer
+		cmd.Stdout = &stdout
+		cmd.Stderr = &stderr
+		code := 0
+		if err := cmd.Run(); err != nil {
+			if ee, ok := err.(*exec.ExitError); ok {
+				code = ee.ExitCode()
+			} else {
+				fail("Runtime error: run() failed to start: %v\n", err)
+			}
+		}
+		return Value{Kind: "map", MapVal: map[string]Value{
+			"code": Value{Kind: "number", NumVal: float64(code)},
+			"out":  Value{Kind: "string", StrVal: stdout.String()},
+			"err":  Value{Kind: "string", StrVal: stderr.String()},
+		}}
 	}
 
 	if call.Name == "parse_json" {
