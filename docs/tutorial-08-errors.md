@@ -61,7 +61,31 @@ print(scor)   // ERROR: undefined variable 'scor' — meant score
 n := num("abc")   // ERROR — validate with your own isNumber() first
 ```
 
-## 3. Debugging strategy
+## 3. Catching errors with `try`/`catch`
+
+Lexer and parser errors kill the program before it starts — nothing to
+catch there. But *runtime* errors can be intercepted:
+
+```
+try {
+    print(10 / 0)
+} catch e {
+    print("caught: ", e)
+}
+print("alive")   // still runs
+```
+
+```
+caught: Runtime error: division by zero
+alive
+```
+
+The `catch e` variable holds the message (skip it as bare `catch` if you
+don't need it). Works across function calls, nests, and `return` inside
+`try` still returns from the function. What you *don't* catch keeps the
+old behavior: message plus exit code 1.
+
+## 4. Debugging strategy
 
 1. **Read the message literally.** `undefined variable 'scor'` tells
    you the name *and* the problem. `at 5:3` tells you where.

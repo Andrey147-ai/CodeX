@@ -71,6 +71,8 @@ const (
 	TOK_PERCENT
 	TOK_DIVINT
 	TOK_NIL
+	TOK_TRY
+	TOK_CATCH
 )
 
 type Token struct {
@@ -211,6 +213,10 @@ func (l *Lexer) Tokenize() []Token {
 				typ = TOK_DIVINT
 			case "nil":
 				typ = TOK_NIL
+			case "try":
+				typ = TOK_TRY
+			case "catch":
+				typ = TOK_CATCH
 			case "import":
 				typ = TOK_IMPORT
 			}
@@ -482,6 +488,14 @@ type ImportStmt struct {
 
 func (i *ImportStmt) isASTNode() {}
 
+type TryCatch struct {
+	Body      []ASTNode
+	CatchVar  string
+	CatchBody []ASTNode
+}
+
+func (t *TryCatch) isASTNode() {}
+
 type FuncDef struct {
 	Name     string
 	Params   []string
@@ -609,6 +623,8 @@ func (p *Parser) parseStatement() ASTNode {
 		return p.parseWhile()
 	case TOK_FOR:
 		return p.parseFor()
+	case TOK_TRY:
+		return p.parseTry()
 	case TOK_IMPORT:
 		p.next()
 		pathTok := p.peek()
@@ -871,6 +887,28 @@ func (p *Parser) parseFor() ASTNode {
 	}
 	p.expect(TOK_RBRACE)
 	return &ForLoop{Init: init, Cond: cond, Post: post, Body: body}
+}
+
+func (p *Parser) parseTry() ASTNode {
+	p.expect(TOK_TRY)
+	p.expect(TOK_LBRACE)
+	var body []ASTNode
+	for p.peek().Type != TOK_RBRACE && p.peek().Type != TOK_EOF {
+		body = append(body, p.parseStatement())
+	}
+	p.expect(TOK_RBRACE)
+	p.expect(TOK_CATCH)
+	catchVar := ""
+	if p.peek().Type == TOK_IDENT {
+		catchVar = p.next().Value
+	}
+	p.expect(TOK_LBRACE)
+	var catchBody []ASTNode
+	for p.peek().Type != TOK_RBRACE && p.peek().Type != TOK_EOF {
+		catchBody = append(catchBody, p.parseStatement())
+	}
+	p.expect(TOK_RBRACE)
+	return &TryCatch{Body: body, CatchVar: catchVar, CatchBody: catchBody}
 }
 
 func (p *Parser) parseDelCall() ASTNode {
@@ -1293,12 +1331,10 @@ func (interp *Interpreter) eval(node ASTNode, env *Environment) Value {
 		for current != nil {
 			if obj, ok := current.vars[n.Object]; ok {
 				if obj.Kind != "struct" {
-					fmt.Fprintf(os.Stderr, "Runtime error: variable '%s' is not a struct\n", n.Object)
-					os.Exit(1)
+					fail("Runtime error: variable '%s' is not a struct\n", n.Object)
 				}
 				if _, exists := obj.Fields[n.Field]; !exists {
-					fmt.Fprintf(os.Stderr, "Runtime error: struct '%s' has no field '%s'\n", obj.TypeName, n.Field)
-					os.Exit(1)
+					fail("Runtime error: struct '%s' has no field '%s'\n", obj.TypeName, n.Field)
 				}
 				obj.Fields[n.Field] = val
 				current.vars[n.Object] = obj
@@ -1306,8 +1342,7 @@ func (interp *Interpreter) eval(node ASTNode, env *Environment) Value {
 			}
 			current = current.parent
 		}
-		fmt.Fprintf(os.Stderr, "Runtime error: undefined variable '%s'\n", n.Object)
-		os.Exit(1)
+		fail("Runtime error: undefined variable '%s'\n", n.Object)
 
 	case *NumberLiteral:
 		return Value{Kind: "number", NumVal: n.Value}
@@ -1325,8 +1360,7 @@ func (interp *Interpreter) eval(node ASTNode, env *Environment) Value {
 		if val, ok := env.getVar(n.Name); ok {
 			return val
 		}
-		fmt.Fprintf(os.Stderr, "Runtime error: undefined variable '%s'\n", n.Name)
-		os.Exit(1)
+		fail("Runtime error: undefined variable '%s'\n", n.Name)
 
 	case *BinaryOp:
 		left := interp.eval(n.Left, env)
@@ -1342,11 +1376,9 @@ func (interp *Interpreter) eval(node ASTNode, env *Environment) Value {
 			if val.Kind == "number" {
 				return Value{Kind: "number", NumVal: -val.NumVal}
 			}
-			fmt.Fprintf(os.Stderr, "Runtime error: unary - on %s\n", val.Kind)
-			os.Exit(1)
+			fail("Runtime error: unary - on %s\n", val.Kind)
 		default:
-			fmt.Fprintf(os.Stderr, "Runtime error: unknown unary op %s\n", n.Op)
-			os.Exit(1)
+			fail("Runtime error: unknown unary op %s\n", n.Op)
 		}
 
 	case *FuncCall:
@@ -1357,6 +1389,9 @@ func (interp *Interpreter) eval(node ASTNode, env *Environment) Value {
 
 	case *ImportStmt:
 		return interp.evalImport(n.Path, env)
+
+	case *TryCatch:
+		return interp.evalTry(n, env)
 
 	case *IfStatement:
 		cond := interp.eval(n.Condition, env)
@@ -1396,14 +1431,12 @@ func (interp *Interpreter) eval(node ASTNode, env *Environment) Value {
 			key := interp.evalMapKey(n.Index, env)
 			val, ok := cont.MapVal[key]
 			if !ok {
-				fmt.Fprintf(os.Stderr, "Runtime error: missing key %q\n", key)
-				os.Exit(1)
+				fail("Runtime error: missing key %q\n", key)
 			}
 			return val
 		}
 		if cont.Kind != "array" {
-			fmt.Fprintf(os.Stderr, "Runtime error: indexing non-array (%s)\n", cont.Kind)
-			os.Exit(1)
+			fail("Runtime error: indexing non-array (%s)\n", cont.Kind)
 		}
 		return cont.Items[interp.evalArrayIndex(n.Index, env, len(cont.Items))]
 
@@ -1416,8 +1449,7 @@ func (interp *Interpreter) eval(node ASTNode, env *Environment) Value {
 			return val
 		}
 		if cont.Kind != "array" {
-			fmt.Fprintf(os.Stderr, "Runtime error: indexing non-array (%s)\n", cont.Kind)
-			os.Exit(1)
+			fail("Runtime error: indexing non-array (%s)\n", cont.Kind)
 		}
 		cont.Items[interp.evalArrayIndex(n.Index, env, len(cont.Items))] = val
 		return val
@@ -1435,8 +1467,7 @@ func (interp *Interpreter) eval(node ASTNode, env *Environment) Value {
 			s, e := interp.evalSliceBounds(n.Start, n.End, env, len(runes))
 			return Value{Kind: "string", StrVal: string(runes[s:e])}
 		default:
-			fmt.Fprintf(os.Stderr, "Runtime error: slicing %s\n", cont.Kind)
-			os.Exit(1)
+			fail("Runtime error: slicing %s\n", cont.Kind)
 		}
 
 	case *BreakStmt:
@@ -1466,8 +1497,7 @@ func (interp *Interpreter) eval(node ASTNode, env *Environment) Value {
 			current = current.parent
 		}
 		if structDef == nil {
-			fmt.Fprintf(os.Stderr, "Runtime error: unknown struct '%s'\n", n.Name)
-			os.Exit(1)
+			fail("Runtime error: unknown struct '%s'\n", n.Name)
 		}
 		fields := make(map[string]Value)
 		for i, fieldName := range structDef.Fields {
@@ -1482,21 +1512,18 @@ func (interp *Interpreter) eval(node ASTNode, env *Environment) Value {
 	case *FieldAccess:
 		obj := interp.eval(n.Object, env)
 		if obj.Kind != "struct" {
-			fmt.Fprintf(os.Stderr, "Runtime error: field access on non-struct\n")
-			os.Exit(1)
+			fail("Runtime error: field access on non-struct\n")
 		}
 		if val, ok := obj.Fields[n.Field]; ok {
 			return val
 		}
-		fmt.Fprintf(os.Stderr, "Runtime error: struct has no field '%s'\n", n.Field)
-		os.Exit(1)
+		fail("Runtime error: struct has no field '%s'\n", n.Field)
 
 	case *DelCall:
 		return interp.evalDel(n, env)
 
 	default:
-		fmt.Fprintf(os.Stderr, "Runtime error: unknown node type %T\n", node)
-		os.Exit(1)
+		fail("Runtime error: unknown node type %T\n", node)
 	}
 	return Value{Kind: "nil"}
 }
@@ -1511,6 +1538,8 @@ func (interp *Interpreter) evalTopLevel(stmt ASTNode, env *Environment) (out Val
 				fmt.Fprintf(os.Stderr, "Runtime error: 'continue' outside loop\n")
 			case *returnValue:
 				fmt.Fprintf(os.Stderr, "Runtime error: 'return' outside function\n")
+			case *runtimeError:
+				fmt.Fprintf(os.Stderr, "%s\n", r.(*runtimeError).msg)
 			default:
 				panic(r)
 			}
@@ -1539,6 +1568,19 @@ type returnValue struct {
 type breakSignal struct{}
 
 type continueSignal struct{}
+
+// runtimeError is a catchable script failure. All interpreter error paths
+// panic with it instead of calling os.Exit, so try/catch can intercept;
+// uncaught it prints exactly like the old fatal errors.
+type runtimeError struct {
+	msg string
+}
+
+func fail(format string, args ...interface{}) {
+	msg := fmt.Sprintf(format, args...)
+	msg = strings.TrimSuffix(msg, "\n")
+	panic(&runtimeError{msg: msg})
+}
 
 func (interp *Interpreter) evalFor(node *ForLoop, env *Environment) Value {
 	loopEnv := NewEnvironment(env)
@@ -1583,8 +1625,7 @@ func (interp *Interpreter) evalFor(node *ForLoop, env *Environment) Value {
 func (interp *Interpreter) evalForIn(node *ForIn, env *Environment) Value {
 	iterable := interp.eval(node.Iterable, env)
 	if iterable.Kind != "array" {
-		fmt.Fprintf(os.Stderr, "Runtime error: for-in needs an array, got %s\n", iterable.Kind)
-		os.Exit(1)
+		fail("Runtime error: for-in needs an array, got %s\n", iterable.Kind)
 	}
 	loopEnv := NewEnvironment(env)
 	defer interp.cleanupLocals(loopEnv)
@@ -1617,8 +1658,7 @@ func (interp *Interpreter) evalForIn(node *ForIn, env *Environment) Value {
 func (interp *Interpreter) evalMapKey(node ASTNode, env *Environment) string {
 	v := interp.eval(node, env)
 	if v.Kind != "string" {
-		fmt.Fprintf(os.Stderr, "Runtime error: map key must be a string, got %s\n", v.Kind)
-		os.Exit(1)
+		fail("Runtime error: map key must be a string, got %s\n", v.Kind)
 	}
 	return v.StrVal
 }
@@ -1626,20 +1666,17 @@ func (interp *Interpreter) evalMapKey(node ASTNode, env *Environment) string {
 func (interp *Interpreter) evalArrayIndex(node ASTNode, env *Environment, length int) int {
 	v := interp.eval(node, env)
 	if v.Kind != "number" {
-		fmt.Fprintf(os.Stderr, "Runtime error: array index must be a number, got %s\n", v.Kind)
-		os.Exit(1)
+		fail("Runtime error: array index must be a number, got %s\n", v.Kind)
 	}
 	if v.NumVal != math.Trunc(v.NumVal) {
-		fmt.Fprintf(os.Stderr, "Runtime error: array index must be an integer\n")
-		os.Exit(1)
+		fail("Runtime error: array index must be an integer\n")
 	}
 	i := int(v.NumVal)
 	if i < 0 {
 		i += length
 	}
 	if i < 0 || i >= length {
-		fmt.Fprintf(os.Stderr, "Runtime error: index %d out of range (len %d)\n", int(v.NumVal), length)
-		os.Exit(1)
+		fail("Runtime error: index %d out of range (len %d)\n", int(v.NumVal), length)
 	}
 	return i
 }
@@ -1651,12 +1688,10 @@ func (interp *Interpreter) evalSliceBounds(start, end ASTNode, env *Environment,
 		}
 		v := interp.eval(node, env)
 		if v.Kind != "number" {
-			fmt.Fprintf(os.Stderr, "Runtime error: slice bound must be a number, got %s\n", v.Kind)
-			os.Exit(1)
+			fail("Runtime error: slice bound must be a number, got %s\n", v.Kind)
 		}
 		if v.NumVal != math.Trunc(v.NumVal) {
-			fmt.Fprintf(os.Stderr, "Runtime error: slice bound must be an integer\n")
-			os.Exit(1)
+			fail("Runtime error: slice bound must be an integer\n")
 		}
 		i := int(v.NumVal)
 		if i < 0 {
@@ -1718,8 +1753,7 @@ func (interp *Interpreter) evalFuncCall(call *FuncCall, env *Environment) (resul
 
 	if call.Name == "len" {
 		if len(call.Args) != 1 {
-			fmt.Fprintf(os.Stderr, "Runtime error: len() takes exactly 1 argument\n")
-			os.Exit(1)
+			fail("Runtime error: len() takes exactly 1 argument\n")
 		}
 		v := interp.eval(call.Args[0], env)
 		switch v.Kind {
@@ -1730,25 +1764,21 @@ func (interp *Interpreter) evalFuncCall(call *FuncCall, env *Environment) (resul
 		case "string":
 			return Value{Kind: "number", NumVal: float64(len([]rune(v.StrVal)))}
 		default:
-			fmt.Fprintf(os.Stderr, "Runtime error: len() of %s\n", v.Kind)
-			os.Exit(1)
+			fail("Runtime error: len() of %s\n", v.Kind)
 		}
 	}
 
 	if call.Name == "push" {
 		if len(call.Args) != 2 {
-			fmt.Fprintf(os.Stderr, "Runtime error: push() takes exactly 2 arguments\n")
-			os.Exit(1)
+			fail("Runtime error: push() takes exactly 2 arguments\n")
 		}
 		target, ok := call.Args[0].(*Identifier)
 		if !ok {
-			fmt.Fprintf(os.Stderr, "Runtime error: push() target must be a variable\n")
-			os.Exit(1)
+			fail("Runtime error: push() target must be a variable\n")
 		}
 		arr, ok := env.getVar(target.Name)
 		if !ok || arr.Kind != "array" {
-			fmt.Fprintf(os.Stderr, "Runtime error: push() target '%s' is not an array\n", target.Name)
-			os.Exit(1)
+			fail("Runtime error: push() target '%s' is not an array\n", target.Name)
 		}
 		arr.Items = append(arr.Items, interp.eval(call.Args[1], env))
 		current := env
@@ -1764,16 +1794,14 @@ func (interp *Interpreter) evalFuncCall(call *FuncCall, env *Environment) (resul
 
 	if call.Name == "str" {
 		if len(call.Args) != 1 {
-			fmt.Fprintf(os.Stderr, "Runtime error: str() takes exactly 1 argument\n")
-			os.Exit(1)
+			fail("Runtime error: str() takes exactly 1 argument\n")
 		}
 		return Value{Kind: "string", StrVal: valueToString(interp.eval(call.Args[0], env))}
 	}
 
 	if call.Name == "num" {
 		if len(call.Args) != 1 {
-			fmt.Fprintf(os.Stderr, "Runtime error: num() takes exactly 1 argument\n")
-			os.Exit(1)
+			fail("Runtime error: num() takes exactly 1 argument\n")
 		}
 		v := interp.eval(call.Args[0], env)
 		switch v.Kind {
@@ -1787,20 +1815,17 @@ func (interp *Interpreter) evalFuncCall(call *FuncCall, env *Environment) (resul
 		case "string":
 			f, err := strconv.ParseFloat(strings.TrimSpace(v.StrVal), 64)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "Runtime error: num() cannot convert %q\n", v.StrVal)
-				os.Exit(1)
+				fail("Runtime error: num() cannot convert %q\n", v.StrVal)
 			}
 			return Value{Kind: "number", NumVal: f}
 		default:
-			fmt.Fprintf(os.Stderr, "Runtime error: num() of %s\n", v.Kind)
-			os.Exit(1)
+			fail("Runtime error: num() of %s\n", v.Kind)
 		}
 	}
 
 	if call.Name == "input" {
 		if len(call.Args) > 1 {
-			fmt.Fprintf(os.Stderr, "Runtime error: input() takes at most 1 argument\n")
-			os.Exit(1)
+			fail("Runtime error: input() takes at most 1 argument\n")
 		}
 		if len(call.Args) == 1 {
 			prompt := interp.eval(call.Args[0], env)
@@ -1810,21 +1835,18 @@ func (interp *Interpreter) evalFuncCall(call *FuncCall, env *Environment) (resul
 		// уже забуферизованный stdin
 		line, err := stdinReader.ReadString('\n')
 		if err != nil && err != io.EOF {
-			fmt.Fprintf(os.Stderr, "Runtime error: input() failed: %v\n", err)
-			os.Exit(1)
+			fail("Runtime error: input() failed: %v\n", err)
 		}
 		return Value{Kind: "string", StrVal: strings.TrimRight(line, "\r\n")}
 	}
 
 	if call.Name == "upper" || call.Name == "lower" {
 		if len(call.Args) != 1 {
-			fmt.Fprintf(os.Stderr, "Runtime error: %s() takes exactly 1 argument\n", call.Name)
-			os.Exit(1)
+			fail("Runtime error: %s() takes exactly 1 argument\n", call.Name)
 		}
 		v := interp.eval(call.Args[0], env)
 		if v.Kind != "string" {
-			fmt.Fprintf(os.Stderr, "Runtime error: %s() needs a string, got %s\n", call.Name, v.Kind)
-			os.Exit(1)
+			fail("Runtime error: %s() needs a string, got %s\n", call.Name, v.Kind)
 		}
 		if call.Name == "upper" {
 			return Value{Kind: "string", StrVal: strings.ToUpper(v.StrVal)}
@@ -1834,28 +1856,24 @@ func (interp *Interpreter) evalFuncCall(call *FuncCall, env *Environment) (resul
 
 	if call.Name == "contains" {
 		if len(call.Args) != 2 {
-			fmt.Fprintf(os.Stderr, "Runtime error: contains() takes exactly 2 arguments\n")
-			os.Exit(1)
+			fail("Runtime error: contains() takes exactly 2 arguments\n")
 		}
 		s := interp.eval(call.Args[0], env)
 		sub := interp.eval(call.Args[1], env)
 		if s.Kind != "string" || sub.Kind != "string" {
-			fmt.Fprintf(os.Stderr, "Runtime error: contains() needs strings\n")
-			os.Exit(1)
+			fail("Runtime error: contains() needs strings\n")
 		}
 		return Value{Kind: "bool", BoolVal: strings.Contains(s.StrVal, sub.StrVal)}
 	}
 
 	if call.Name == "split" {
 		if len(call.Args) != 2 {
-			fmt.Fprintf(os.Stderr, "Runtime error: split() takes exactly 2 arguments\n")
-			os.Exit(1)
+			fail("Runtime error: split() takes exactly 2 arguments\n")
 		}
 		s := interp.eval(call.Args[0], env)
 		sep := interp.eval(call.Args[1], env)
 		if s.Kind != "string" || sep.Kind != "string" {
-			fmt.Fprintf(os.Stderr, "Runtime error: split() needs strings\n")
-			os.Exit(1)
+			fail("Runtime error: split() needs strings\n")
 		}
 		parts := strings.Split(s.StrVal, sep.StrVal)
 		items := make([]Value, 0, len(parts))
@@ -1867,14 +1885,12 @@ func (interp *Interpreter) evalFuncCall(call *FuncCall, env *Environment) (resul
 
 	if call.Name == "join" {
 		if len(call.Args) != 2 {
-			fmt.Fprintf(os.Stderr, "Runtime error: join() takes exactly 2 arguments\n")
-			os.Exit(1)
+			fail("Runtime error: join() takes exactly 2 arguments\n")
 		}
 		arr := interp.eval(call.Args[0], env)
 		sep := interp.eval(call.Args[1], env)
 		if arr.Kind != "array" || sep.Kind != "string" {
-			fmt.Fprintf(os.Stderr, "Runtime error: join() needs (array, string)\n")
-			os.Exit(1)
+			fail("Runtime error: join() needs (array, string)\n")
 		}
 		parts := make([]string, 0, len(arr.Items))
 		for _, item := range arr.Items {
@@ -1885,13 +1901,11 @@ func (interp *Interpreter) evalFuncCall(call *FuncCall, env *Environment) (resul
 
 	if call.Name == "keys" {
 		if len(call.Args) != 1 {
-			fmt.Fprintf(os.Stderr, "Runtime error: keys() takes exactly 1 argument\n")
-			os.Exit(1)
+			fail("Runtime error: keys() takes exactly 1 argument\n")
 		}
 		v := interp.eval(call.Args[0], env)
 		if v.Kind != "map" {
-			fmt.Fprintf(os.Stderr, "Runtime error: keys() needs a map, got %s\n", v.Kind)
-			os.Exit(1)
+			fail("Runtime error: keys() needs a map, got %s\n", v.Kind)
 		}
 		ks := make([]string, 0, len(v.MapVal))
 		for k := range v.MapVal {
@@ -1907,14 +1921,12 @@ func (interp *Interpreter) evalFuncCall(call *FuncCall, env *Environment) (resul
 
 	if call.Name == "has" {
 		if len(call.Args) != 2 {
-			fmt.Fprintf(os.Stderr, "Runtime error: has() takes exactly 2 arguments\n")
-			os.Exit(1)
+			fail("Runtime error: has() takes exactly 2 arguments\n")
 		}
 		m := interp.eval(call.Args[0], env)
 		k := interp.eval(call.Args[1], env)
 		if m.Kind != "map" || k.Kind != "string" {
-			fmt.Fprintf(os.Stderr, "Runtime error: has() needs (map, string)\n")
-			os.Exit(1)
+			fail("Runtime error: has() needs (map, string)\n")
 		}
 		_, ok := m.MapVal[k.StrVal]
 		return Value{Kind: "bool", BoolVal: ok}
@@ -1922,40 +1934,34 @@ func (interp *Interpreter) evalFuncCall(call *FuncCall, env *Environment) (resul
 
 	if call.Name == "sort" {
 		if len(call.Args) != 1 {
-			fmt.Fprintf(os.Stderr, "Runtime error: sort() takes exactly 1 argument\n")
-			os.Exit(1)
+			fail("Runtime error: sort() takes exactly 1 argument\n")
 		}
 		target, ok := call.Args[0].(*Identifier)
 		if !ok {
-			fmt.Fprintf(os.Stderr, "Runtime error: sort() target must be a variable\n")
-			os.Exit(1)
+			fail("Runtime error: sort() target must be a variable\n")
 		}
 		arr, ok := env.getVar(target.Name)
 		if !ok || arr.Kind != "array" {
-			fmt.Fprintf(os.Stderr, "Runtime error: sort() target '%s' is not an array\n", target.Name)
-			os.Exit(1)
+			fail("Runtime error: sort() target '%s' is not an array\n", target.Name)
 		}
 		if len(arr.Items) > 0 {
 			switch arr.Items[0].Kind {
 			case "number":
 				for _, item := range arr.Items {
 					if item.Kind != "number" {
-						fmt.Fprintf(os.Stderr, "Runtime error: sort() needs uniformly typed array\n")
-						os.Exit(1)
+						fail("Runtime error: sort() needs uniformly typed array\n")
 					}
 				}
 				sort.Slice(arr.Items, func(a, b int) bool { return arr.Items[a].NumVal < arr.Items[b].NumVal })
 			case "string":
 				for _, item := range arr.Items {
 					if item.Kind != "string" {
-						fmt.Fprintf(os.Stderr, "Runtime error: sort() needs uniformly typed array\n")
-						os.Exit(1)
+						fail("Runtime error: sort() needs uniformly typed array\n")
 					}
 				}
 				sort.Slice(arr.Items, func(a, b int) bool { return arr.Items[a].StrVal < arr.Items[b].StrVal })
 			default:
-				fmt.Fprintf(os.Stderr, "Runtime error: sort() supports numbers and strings\n")
-				os.Exit(1)
+				fail("Runtime error: sort() supports numbers and strings\n")
 			}
 		}
 		current := env
@@ -1971,8 +1977,7 @@ func (interp *Interpreter) evalFuncCall(call *FuncCall, env *Environment) (resul
 
 	if call.Name == "args" {
 		if len(call.Args) != 0 {
-			fmt.Fprintf(os.Stderr, "Runtime error: args() takes no arguments\n")
-			os.Exit(1)
+			fail("Runtime error: args() takes no arguments\n")
 		}
 		items := make([]Value, 0, len(os.Args)-2)
 		for _, a := range os.Args[2:] {
@@ -1983,61 +1988,51 @@ func (interp *Interpreter) evalFuncCall(call *FuncCall, env *Environment) (resul
 
 	if call.Name == "http_get" {
 		if len(call.Args) != 1 {
-			fmt.Fprintf(os.Stderr, "Runtime error: http_get() takes exactly 1 argument\n")
-			os.Exit(1)
+			fail("Runtime error: http_get() takes exactly 1 argument\n")
 		}
 		url := interp.eval(call.Args[0], env)
 		if url.Kind != "string" {
-			fmt.Fprintf(os.Stderr, "Runtime error: http_get() needs a string URL, got %s\n", url.Kind)
-			os.Exit(1)
+			fail("Runtime error: http_get() needs a string URL, got %s\n", url.Kind)
 		}
 		client := &http.Client{Timeout: 15 * time.Second}
 		resp, err := client.Get(url.StrVal)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Runtime error: http_get() failed: %v\n", err)
-			os.Exit(1)
+			fail("Runtime error: http_get() failed: %v\n", err)
 		}
 		defer resp.Body.Close()
 		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-			fmt.Fprintf(os.Stderr, "Runtime error: http_get() status %s\n", resp.Status)
-			os.Exit(1)
+			fail("Runtime error: http_get() status %s\n", resp.Status)
 		}
 		body, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Runtime error: http_get() read failed: %v\n", err)
-			os.Exit(1)
+			fail("Runtime error: http_get() read failed: %v\n", err)
 		}
 		return Value{Kind: "string", StrVal: string(body)}
 	}
 
 	if call.Name == "read_file" {
 		if len(call.Args) != 1 {
-			fmt.Fprintf(os.Stderr, "Runtime error: read_file() takes exactly 1 argument\n")
-			os.Exit(1)
+			fail("Runtime error: read_file() takes exactly 1 argument\n")
 		}
 		path := interp.eval(call.Args[0], env)
 		if path.Kind != "string" {
-			fmt.Fprintf(os.Stderr, "Runtime error: read_file() needs a string path, got %s\n", path.Kind)
-			os.Exit(1)
+			fail("Runtime error: read_file() needs a string path, got %s\n", path.Kind)
 		}
 		data, err := os.ReadFile(path.StrVal)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Runtime error: read_file() failed: %v\n", err)
-			os.Exit(1)
+			fail("Runtime error: read_file() failed: %v\n", err)
 		}
 		return Value{Kind: "string", StrVal: string(data)}
 	}
 
 	if call.Name == "write_file" || call.Name == "append_file" {
 		if len(call.Args) != 2 {
-			fmt.Fprintf(os.Stderr, "Runtime error: %s() takes exactly 2 arguments\n", call.Name)
-			os.Exit(1)
+			fail("Runtime error: %s() takes exactly 2 arguments\n", call.Name)
 		}
 		path := interp.eval(call.Args[0], env)
 		content := interp.eval(call.Args[1], env)
 		if path.Kind != "string" || content.Kind != "string" {
-			fmt.Fprintf(os.Stderr, "Runtime error: %s() needs (string, string)\n", call.Name)
-			os.Exit(1)
+			fail("Runtime error: %s() needs (string, string)\n", call.Name)
 		}
 		var err error
 		if call.Name == "write_file" {
@@ -2051,21 +2046,18 @@ func (interp *Interpreter) evalFuncCall(call *FuncCall, env *Environment) (resul
 			}
 		}
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Runtime error: %s() failed: %v\n", call.Name, err)
-			os.Exit(1)
+			fail("Runtime error: %s() failed: %v\n", call.Name, err)
 		}
 		return Value{Kind: "number", NumVal: float64(len(content.StrVal))}
 	}
 
 	if call.Name == "exists" {
 		if len(call.Args) != 1 {
-			fmt.Fprintf(os.Stderr, "Runtime error: exists() takes exactly 1 argument\n")
-			os.Exit(1)
+			fail("Runtime error: exists() takes exactly 1 argument\n")
 		}
 		path := interp.eval(call.Args[0], env)
 		if path.Kind != "string" {
-			fmt.Fprintf(os.Stderr, "Runtime error: exists() needs a string path, got %s\n", path.Kind)
-			os.Exit(1)
+			fail("Runtime error: exists() needs a string path, got %s\n", path.Kind)
 		}
 		_, err := os.Stat(path.StrVal)
 		return Value{Kind: "bool", BoolVal: err == nil}
@@ -2073,8 +2065,7 @@ func (interp *Interpreter) evalFuncCall(call *FuncCall, env *Environment) (resul
 
 	if call.Name == "type" {
 		if len(call.Args) != 1 {
-			fmt.Fprintf(os.Stderr, "Runtime error: type() takes exactly 1 argument\n")
-			os.Exit(1)
+			fail("Runtime error: type() takes exactly 1 argument\n")
 		}
 		v := interp.eval(call.Args[0], env)
 		if v.Kind == "struct" {
@@ -2085,13 +2076,11 @@ func (interp *Interpreter) evalFuncCall(call *FuncCall, env *Environment) (resul
 
 	if call.Name == "env" {
 		if len(call.Args) != 1 {
-			fmt.Fprintf(os.Stderr, "Runtime error: env() takes exactly 1 argument\n")
-			os.Exit(1)
+			fail("Runtime error: env() takes exactly 1 argument\n")
 		}
 		name := interp.eval(call.Args[0], env)
 		if name.Kind != "string" {
-			fmt.Fprintf(os.Stderr, "Runtime error: env() needs a string, got %s\n", name.Kind)
-			os.Exit(1)
+			fail("Runtime error: env() needs a string, got %s\n", name.Kind)
 		}
 		if val, ok := os.LookupEnv(name.StrVal); ok {
 			return Value{Kind: "string", StrVal: val}
@@ -2101,15 +2090,13 @@ func (interp *Interpreter) evalFuncCall(call *FuncCall, env *Environment) (resul
 
 	if call.Name == "exit" {
 		if len(call.Args) > 1 {
-			fmt.Fprintf(os.Stderr, "Runtime error: exit() takes at most 1 argument\n")
-			os.Exit(1)
+			fail("Runtime error: exit() takes at most 1 argument\n")
 		}
 		code := 0
 		if len(call.Args) == 1 {
 			v := interp.eval(call.Args[0], env)
 			if v.Kind != "number" {
-				fmt.Fprintf(os.Stderr, "Runtime error: exit() needs a number, got %s\n", v.Kind)
-				os.Exit(1)
+				fail("Runtime error: exit() needs a number, got %s\n", v.Kind)
 			}
 			code = int(v.NumVal)
 		}
@@ -2119,47 +2106,40 @@ func (interp *Interpreter) evalFuncCall(call *FuncCall, env *Environment) (resul
 
 	if call.Name == "now" {
 		if len(call.Args) != 0 {
-			fmt.Fprintf(os.Stderr, "Runtime error: now() takes no arguments\n")
-			os.Exit(1)
+			fail("Runtime error: now() takes no arguments\n")
 		}
 		return Value{Kind: "number", NumVal: float64(time.Now().Unix())}
 	}
 
 	if call.Name == "parse_json" {
 		if len(call.Args) != 1 {
-			fmt.Fprintf(os.Stderr, "Runtime error: parse_json() takes exactly 1 argument\n")
-			os.Exit(1)
+			fail("Runtime error: parse_json() takes exactly 1 argument\n")
 		}
 		s := interp.eval(call.Args[0], env)
 		if s.Kind != "string" {
-			fmt.Fprintf(os.Stderr, "Runtime error: parse_json() needs a string, got %s\n", s.Kind)
-			os.Exit(1)
+			fail("Runtime error: parse_json() needs a string, got %s\n", s.Kind)
 		}
 		val, err := parseJSON(s.StrVal)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Runtime error: parse_json() failed: %v\n", err)
-			os.Exit(1)
+			fail("Runtime error: parse_json() failed: %v\n", err)
 		}
 		return val
 	}
 
 	if call.Name == "to_json" {
 		if len(call.Args) != 1 {
-			fmt.Fprintf(os.Stderr, "Runtime error: to_json() takes exactly 1 argument\n")
-			os.Exit(1)
+			fail("Runtime error: to_json() takes exactly 1 argument\n")
 		}
 		return Value{Kind: "string", StrVal: valueToJSON(interp.eval(call.Args[0], env))}
 	}
 
 	if call.Name == "sleep" {
 		if len(call.Args) != 1 {
-			fmt.Fprintf(os.Stderr, "Runtime error: sleep() takes exactly 1 argument\n")
-			os.Exit(1)
+			fail("Runtime error: sleep() takes exactly 1 argument\n")
 		}
 		ms := interp.eval(call.Args[0], env)
 		if ms.Kind != "number" || ms.NumVal < 0 {
-			fmt.Fprintf(os.Stderr, "Runtime error: sleep() needs non-negative milliseconds\n")
-			os.Exit(1)
+			fail("Runtime error: sleep() needs non-negative milliseconds\n")
 		}
 		time.Sleep(time.Duration(ms.NumVal * float64(time.Millisecond)))
 		return Value{Kind: "nil"}
@@ -2167,31 +2147,26 @@ func (interp *Interpreter) evalFuncCall(call *FuncCall, env *Environment) (resul
 
 	if call.Name == "pkgdir" {
 		if len(call.Args) != 1 {
-			fmt.Fprintf(os.Stderr, "Runtime error: pkgdir() takes exactly 1 argument\n")
-			os.Exit(1)
+			fail("Runtime error: pkgdir() takes exactly 1 argument\n")
 		}
 		name := interp.eval(call.Args[0], env)
 		if name.Kind != "string" {
-			fmt.Fprintf(os.Stderr, "Runtime error: pkgdir() needs a string, got %s\n", name.Kind)
-			os.Exit(1)
+			fail("Runtime error: pkgdir() needs a string, got %s\n", name.Kind)
 		}
 		spec, ok := parsePkgSpec(name.StrVal)
 		if !ok {
-			fmt.Fprintf(os.Stderr, "Runtime error: pkgdir() wants user/repo[@ver], got %q\n", name.StrVal)
-			os.Exit(1)
+			fail("Runtime error: pkgdir() wants user/repo[@ver], got %q\n", name.StrVal)
 		}
 		dest, err := ensurePackage(spec)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Runtime error: pkgdir() fetch failed: %v\n", err)
-			os.Exit(1)
+			fail("Runtime error: pkgdir() fetch failed: %v\n", err)
 		}
 		return Value{Kind: "string", StrVal: dest}
 	}
 
 	fn, ok := env.getFunc(call.Name)
 	if !ok {
-		fmt.Fprintf(os.Stderr, "Runtime error: undefined function '%s'\n", call.Name)
-		os.Exit(1)
+		fail("Runtime error: undefined function '%s'\n", call.Name)
 	}
 
 	fnEnv := NewEnvironment(interp.globalEnv)
@@ -2211,6 +2186,9 @@ func (interp *Interpreter) evalFuncCall(call *FuncCall, env *Environment) (resul
 				interp.cleanupLocals(fnEnv)
 				result = rv.val
 				return
+			}
+			if _, ok := r.(*runtimeError); ok {
+				interp.cleanupLocals(fnEnv)
 			}
 			panic(r)
 		}
@@ -2451,13 +2429,11 @@ func (interp *Interpreter) evalImport(path string, env *Environment) Value {
 	if spec, ok := parsePkgSpec(path); ok {
 		dest, err := ensurePackage(spec)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Import error %q: %v\n", path, err)
-			os.Exit(1)
+			fail("Import error %q: %v", path, err)
 		}
 		f, err := pkgEntryFile(dest, spec)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Import error %q: %v\n", path, err)
-			os.Exit(1)
+			fail("Import error %q: %v", path, err)
 		}
 		abs = f
 	} else {
@@ -2474,8 +2450,7 @@ func (interp *Interpreter) evalImport(path string, env *Environment) Value {
 		}
 		abs = p
 		if _, err := os.Stat(abs); err != nil {
-			fmt.Fprintf(os.Stderr, "Import error: cannot stat %s\n", abs)
-			os.Exit(1)
+			fail("Import error: cannot stat %s\n", abs)
 		}
 	}
 	abs = filepath.Clean(abs)
@@ -2484,14 +2459,12 @@ func (interp *Interpreter) evalImport(path string, env *Environment) Value {
 	}
 	for _, f := range interp.importFiles {
 		if f == abs {
-			fmt.Fprintf(os.Stderr, "Import error: cycle detected at %s\n", abs)
-			os.Exit(1)
+			fail("Import error: cycle detected at %s\n", abs)
 		}
 	}
 	data, err := os.ReadFile(abs)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Import error: cannot read %s: %v\n", abs, err)
-		os.Exit(1)
+		fail("Import error: cannot read %s: %v\n", abs, err)
 	}
 	interp.importFiles = append(interp.importFiles, abs)
 	interp.importStack = append(interp.importStack, filepath.Dir(abs))
@@ -2503,16 +2476,35 @@ func (interp *Interpreter) evalImport(path string, env *Environment) Value {
 	return Value{Kind: "nil"}
 }
 
+func (interp *Interpreter) evalTry(node *TryCatch, env *Environment) (result Value) {
+	result = Value{Kind: "nil"}
+	func() {
+		defer func() {
+			if r := recover(); r != nil {
+				if re, ok := r.(*runtimeError); ok {
+					cenv := NewEnvironment(env)
+					if node.CatchVar != "" {
+						cenv.setVar(node.CatchVar, Value{Kind: "string", StrVal: re.msg})
+					}
+					result = interp.evalBlock(node.CatchBody, cenv)
+					return
+				}
+				panic(r)
+			}
+		}()
+		result = interp.evalBlock(node.Body, env)
+	}()
+	return result
+}
+
 func (interp *Interpreter) evalMethodCall(call *MethodCall, env *Environment) (result Value) {
 	recv := interp.eval(call.Receiver, env)
 	if recv.Kind != "struct" {
-		fmt.Fprintf(os.Stderr, "Runtime error: method '%s' called on non-struct (%s)\n", call.Method, recv.Kind)
-		os.Exit(1)
+		fail("Runtime error: method '%s' called on non-struct (%s)\n", call.Method, recv.Kind)
 	}
 	fn, ok := env.getMethod(recv.TypeName, call.Method)
 	if !ok {
-		fmt.Fprintf(os.Stderr, "Runtime error: struct '%s' has no method '%s'\n", recv.TypeName, call.Method)
-		os.Exit(1)
+		fail("Runtime error: struct '%s' has no method '%s'\n", recv.TypeName, call.Method)
 	}
 
 	fnEnv := NewEnvironment(interp.globalEnv)
@@ -2535,6 +2527,9 @@ func (interp *Interpreter) evalMethodCall(call *MethodCall, env *Environment) (r
 				interp.cleanupLocals(fnEnv)
 				result = rv.val
 				return
+			}
+			if _, ok := r.(*runtimeError); ok {
+				interp.cleanupLocals(fnEnv)
 			}
 			panic(r)
 		}
@@ -2612,20 +2607,17 @@ func (interp *Interpreter) evalBinaryOp(left Value, op string, right Value) Valu
 			return Value{Kind: "number", NumVal: left.NumVal * right.NumVal}
 		case "/":
 			if right.NumVal == 0 {
-				fmt.Fprintf(os.Stderr, "Runtime error: division by zero\n")
-				os.Exit(1)
+				fail("Runtime error: division by zero\n")
 			}
 			return Value{Kind: "number", NumVal: left.NumVal / right.NumVal}
 		case "%":
 			if right.NumVal == 0 {
-				fmt.Fprintf(os.Stderr, "Runtime error: modulo by zero\n")
-				os.Exit(1)
+				fail("Runtime error: modulo by zero\n")
 			}
 			return Value{Kind: "number", NumVal: math.Mod(left.NumVal, right.NumVal)}
 		case "div":
 			if right.NumVal == 0 {
-				fmt.Fprintf(os.Stderr, "Runtime error: integer division by zero\n")
-				os.Exit(1)
+				fail("Runtime error: integer division by zero\n")
 			}
 			return Value{Kind: "number", NumVal: math.Trunc(left.NumVal / right.NumVal)}
 		case "<":
@@ -2652,8 +2644,7 @@ func (interp *Interpreter) evalBinaryOp(left Value, op string, right Value) Valu
 			return Value{Kind: "bool", BoolVal: left.StrVal >= right.StrVal}
 		}
 	}
-	fmt.Fprintf(os.Stderr, "Runtime error: invalid binary op %s on %s and %s\n", op, left.Kind, right.Kind)
-	os.Exit(1)
+	fail("Runtime error: invalid binary op %s on %s and %s\n", op, left.Kind, right.Kind)
 	return Value{Kind: "nil"}
 }
 
