@@ -70,6 +70,7 @@ const (
 	TOK_IMPORT
 	TOK_PERCENT
 	TOK_DIVINT
+	TOK_NIL
 )
 
 type Token struct {
@@ -208,6 +209,8 @@ func (l *Lexer) Tokenize() []Token {
 				typ = TOK_IN
 			case "div":
 				typ = TOK_DIVINT
+			case "nil":
+				typ = TOK_NIL
 			case "import":
 				typ = TOK_IMPORT
 			}
@@ -356,6 +359,10 @@ func (n *NumberLiteral) isASTNode() {}
 type BoolLiteral struct{ Value bool }
 
 func (b *BoolLiteral) isASTNode() {}
+
+type NilLiteral struct{}
+
+func (n *NilLiteral) isASTNode() {}
 
 type StringLiteral struct{ Value string }
 
@@ -1055,6 +1062,10 @@ func (p *Parser) parsePrimary() ASTNode {
 		p.next()
 		return &BoolLiteral{Value: false}
 	}
+	if tok.Type == TOK_NIL {
+		p.next()
+		return &NilLiteral{}
+	}
 	if tok.Type == TOK_LBRACK {
 		p.next()
 		var elems []ASTNode
@@ -1303,6 +1314,9 @@ func (interp *Interpreter) eval(node ASTNode, env *Environment) Value {
 
 	case *BoolLiteral:
 		return Value{Kind: "bool", BoolVal: n.Value}
+
+	case *NilLiteral:
+		return Value{Kind: "nil"}
 
 	case *StringLiteral:
 		return Value{Kind: "string", StrVal: n.Value}
@@ -2055,6 +2069,60 @@ func (interp *Interpreter) evalFuncCall(call *FuncCall, env *Environment) (resul
 		}
 		_, err := os.Stat(path.StrVal)
 		return Value{Kind: "bool", BoolVal: err == nil}
+	}
+
+	if call.Name == "type" {
+		if len(call.Args) != 1 {
+			fmt.Fprintf(os.Stderr, "Runtime error: type() takes exactly 1 argument\n")
+			os.Exit(1)
+		}
+		v := interp.eval(call.Args[0], env)
+		if v.Kind == "struct" {
+			return Value{Kind: "string", StrVal: "struct:" + v.TypeName}
+		}
+		return Value{Kind: "string", StrVal: v.Kind}
+	}
+
+	if call.Name == "env" {
+		if len(call.Args) != 1 {
+			fmt.Fprintf(os.Stderr, "Runtime error: env() takes exactly 1 argument\n")
+			os.Exit(1)
+		}
+		name := interp.eval(call.Args[0], env)
+		if name.Kind != "string" {
+			fmt.Fprintf(os.Stderr, "Runtime error: env() needs a string, got %s\n", name.Kind)
+			os.Exit(1)
+		}
+		if val, ok := os.LookupEnv(name.StrVal); ok {
+			return Value{Kind: "string", StrVal: val}
+		}
+		return Value{Kind: "nil"}
+	}
+
+	if call.Name == "exit" {
+		if len(call.Args) > 1 {
+			fmt.Fprintf(os.Stderr, "Runtime error: exit() takes at most 1 argument\n")
+			os.Exit(1)
+		}
+		code := 0
+		if len(call.Args) == 1 {
+			v := interp.eval(call.Args[0], env)
+			if v.Kind != "number" {
+				fmt.Fprintf(os.Stderr, "Runtime error: exit() needs a number, got %s\n", v.Kind)
+				os.Exit(1)
+			}
+			code = int(v.NumVal)
+		}
+		os.Exit(code)
+		return Value{Kind: "nil"}
+	}
+
+	if call.Name == "now" {
+		if len(call.Args) != 0 {
+			fmt.Fprintf(os.Stderr, "Runtime error: now() takes no arguments\n")
+			os.Exit(1)
+		}
+		return Value{Kind: "number", NumVal: float64(time.Now().Unix())}
 	}
 
 	if call.Name == "sleep" {

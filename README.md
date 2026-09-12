@@ -154,6 +154,10 @@ import "Andrey147-ai/strutils@v1.2.0"
 | `http_get(url)` | Fetch URL body | `http_get("https://example.com")` |
 | `sleep(ms)` | Millisecond pause | `sleep(50)` |
 | `pkgdir(spec)` | Local path of a GitHub repo | `pkgdir("user/data")` |
+| `type(x)` | Runtime type name | `type([1])` → `"array"` |
+| `env(name)` | Env var or `nil` | `env("PATH")` |
+| `exit(code)` | Exit with code | `exit(3)` |
+| `now()` | Unix timestamp | `now()` |
 | `a div b`, `a % b` | Integer division, modulo | `7 div 2` → `3`, `7 % 3` → `1` |
 | `x[i:j]` | Slices (strings/arrays, negatives ok) | `"hello"[1:4]` → `"ell"` |
 | `del(x)` | Manual scope cleanup | `del(b)` |
