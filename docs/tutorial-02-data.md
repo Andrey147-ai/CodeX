@@ -231,5 +231,4 @@ print(freq)
 
 ---
 
-*Part 3 — files, strings, HTTP and packages: we'll write a log analyzer.
-Parts ship one by one.*
+*Part 3 — [strings](tutorial-03-strings.md): text tools and escapes.*

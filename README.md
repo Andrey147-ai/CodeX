@@ -47,6 +47,21 @@ code and exercises:
   conditions, loops ([read it](docs/tutorial-01-basics.md))
 * **Part 2: data** — arrays, maps, functions, structs, grade book
   ([read it](docs/tutorial-02-data.md))
+* **Part 3: strings** — length, case, split/join, escapes
+  ([read it](docs/tutorial-03-strings.md))
+* **Part 4: files** — read, write, logs ([read it](docs/tutorial-04-files.md))
+* **Part 5: functions** — params, return, scope, methods
+  ([read it](docs/tutorial-05-functions.md))
+* **Part 6: loops** — nesting, logic, infinite loops
+  ([read it](docs/tutorial-06-loops.md))
+* **Part 7: maps** — modeling, nesting, counters
+  ([read it](docs/tutorial-07-maps.md))
+* **Part 8: errors** — reading messages, debugging
+  ([read it](docs/tutorial-08-errors.md))
+* **Part 9: packages** — GitHub imports, publishing
+  ([read it](docs/tutorial-09-packages.md))
+* **Part 10: capstone** — dissecting the shop game
+  ([read it](docs/tutorial-10-shop.md))
 
 Each snippet in the tutorials is executed against the real interpreter
 before publishing, so what you read is what runs.
