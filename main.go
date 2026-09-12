@@ -76,6 +76,8 @@ const (
 	TOK_TRY
 	TOK_CATCH
 	TOK_COMMENT
+	TOK_SWITCH
+	TOK_CASE
 )
 
 type Token struct {
@@ -224,6 +226,10 @@ func (l *Lexer) Tokenize() []Token {
 				typ = TOK_TRY
 			case "catch":
 				typ = TOK_CATCH
+			case "switch":
+				typ = TOK_SWITCH
+			case "case":
+				typ = TOK_CASE
 			case "import":
 				typ = TOK_IMPORT
 			}
@@ -418,23 +424,29 @@ func (i *IfStatement) isASTNode() {}
 type WhileLoop struct {
 	Condition ASTNode
 	Body      []ASTNode
+	Label     string
 }
 
 func (w *WhileLoop) isASTNode() {}
 
-type BreakStmt struct{}
+type BreakStmt struct {
+	Label string
+}
 
 func (b *BreakStmt) isASTNode() {}
 
-type ContinueStmt struct{}
+type ContinueStmt struct {
+	Label string
+}
 
 func (c *ContinueStmt) isASTNode() {}
 
 type ForLoop struct {
-	Init ASTNode
-	Cond ASTNode
-	Post ASTNode
-	Body []ASTNode
+	Init  ASTNode
+	Cond  ASTNode
+	Post  ASTNode
+	Body  []ASTNode
+	Label string
 }
 
 func (f *ForLoop) isASTNode() {}
@@ -485,6 +497,7 @@ type ForIn struct {
 	Var      string
 	Iterable ASTNode
 	Body     []ASTNode
+	Label    string
 }
 
 func (f *ForIn) isASTNode() {}
@@ -502,6 +515,19 @@ type TryCatch struct {
 }
 
 func (t *TryCatch) isASTNode() {}
+
+type SwitchCase struct {
+	Values []ASTNode
+	Body   []ASTNode
+}
+
+type SwitchStmt struct {
+	Target   ASTNode
+	Cases    []*SwitchCase
+	ElseBody []ASTNode
+}
+
+func (s *SwitchStmt) isASTNode() {}
 
 type FuncDef struct {
 	Name     string
@@ -650,6 +676,8 @@ func (p *Parser) parseStatement() ASTNode {
 		return p.parseFor()
 	case TOK_TRY:
 		return p.parseTry()
+	case TOK_SWITCH:
+		return p.parseSwitch()
 	case TOK_IMPORT:
 		p.next()
 		pathTok := p.peek()
@@ -661,10 +689,18 @@ func (p *Parser) parseStatement() ASTNode {
 		return &ImportStmt{Path: pathTok.Value}
 	case TOK_BREAK:
 		p.next()
-		return &BreakStmt{}
+		label := ""
+		if p.peekRaw().Type == TOK_IDENT {
+			label = p.next().Value
+		}
+		return &BreakStmt{Label: label}
 	case TOK_CONTINUE:
 		p.next()
-		return &ContinueStmt{}
+		label := ""
+		if p.peekRaw().Type == TOK_IDENT {
+			label = p.next().Value
+		}
+		return &ContinueStmt{Label: label}
 	case TOK_RETURN:
 		p.next()
 		return &ReturnStmt{Value: p.parseExpr()}
@@ -705,6 +741,27 @@ func (p *Parser) parseStatement() ASTNode {
 		}
 
 		if idx < len(p.tokens) {
+			// метка цикла: name: while/for ...
+			if p.tokens[idx].Type == TOK_COLON {
+				label := p.next().Value
+				p.expect(TOK_COLON)
+				lt := p.peek().Type
+				if lt != TOK_WHILE && lt != TOK_FOR {
+					tok := p.peek()
+					fmt.Fprintf(os.Stderr, "Parser error at %d:%d: label only on loops\n", tok.Line, tok.Col)
+					os.Exit(1)
+				}
+				loop := p.parseStatement()
+				switch ln := loop.(type) {
+				case *WhileLoop:
+					ln.Label = label
+				case *ForLoop:
+					ln.Label = label
+				case *ForIn:
+					ln.Label = label
+				}
+				return loop
+			}
 			if p.tokens[idx].Type == TOK_ASSIGN {
 				name := p.next().Value
 				p.expect(TOK_ASSIGN)
@@ -966,6 +1023,50 @@ func (p *Parser) parseTry() ASTNode {
 	}
 	p.expect(TOK_RBRACE)
 	return &TryCatch{Body: body, CatchVar: catchVar, CatchBody: catchBody}
+}
+
+func (p *Parser) parseSwitch() ASTNode {
+	p.expect(TOK_SWITCH)
+	target := p.parseExpr()
+	p.expect(TOK_LBRACE)
+	stmt := &SwitchStmt{Target: target}
+	for p.peek().Type != TOK_RBRACE && p.peek().Type != TOK_EOF {
+		if p.peek().Type == TOK_CASE {
+			p.next()
+			sc := &SwitchCase{}
+			for {
+				sc.Values = append(sc.Values, p.parseExpr())
+				if p.peek().Type == TOK_COMMA {
+					p.next()
+					continue
+				}
+				break
+			}
+			p.expect(TOK_COLON)
+			p.expect(TOK_LBRACE)
+			for p.peek().Type != TOK_RBRACE && p.peek().Type != TOK_EOF {
+				sc.Body = append(sc.Body, p.parseStatement())
+			}
+			p.expect(TOK_RBRACE)
+			stmt.Cases = append(stmt.Cases, sc)
+		} else if p.peek().Type == TOK_ELSE {
+			p.next()
+			if p.peek().Type == TOK_COLON {
+				p.next()
+			}
+			p.expect(TOK_LBRACE)
+			for p.peek().Type != TOK_RBRACE && p.peek().Type != TOK_EOF {
+				stmt.ElseBody = append(stmt.ElseBody, p.parseStatement())
+			}
+			p.expect(TOK_RBRACE)
+		} else {
+			tok := p.peek()
+			fmt.Fprintf(os.Stderr, "Parser error at %d:%d: expected case or else, got %v\n", tok.Line, tok.Col, tok.Type)
+			os.Exit(1)
+		}
+	}
+	p.expect(TOK_RBRACE)
+	return stmt
 }
 
 func (p *Parser) parseDelCall() ASTNode {
@@ -1333,7 +1434,12 @@ type Interpreter struct {
 	importFiles []string
 	importStack []string
 	structNames map[string]bool
+	frames      []string
 }
+
+// the interpreter currently evaluating (single-threaded runtime);
+// fail() reads its call stack for catchable error messages.
+var activeInterp *Interpreter
 
 func NewInterpreter() *Interpreter {
 	return &Interpreter{
@@ -1462,6 +1568,25 @@ func (interp *Interpreter) eval(node ASTNode, env *Environment) Value {
 	case *TryCatch:
 		return interp.evalTry(n, env)
 
+	case *SwitchStmt:
+		target := interp.eval(n.Target, env)
+		for _, sc := range n.Cases {
+			matched := false
+			for _, v := range sc.Values {
+				if valuesEqual(target, interp.eval(v, env)) {
+					matched = true
+					break
+				}
+			}
+			if matched {
+				return interp.evalBlock(sc.Body, env)
+			}
+		}
+		if len(n.ElseBody) > 0 {
+			return interp.evalBlock(n.ElseBody, env)
+		}
+		return Value{Kind: "nil"}
+
 	case *IfStatement:
 		cond := interp.eval(n.Condition, env)
 		if isTruthy(cond) {
@@ -1547,10 +1672,10 @@ func (interp *Interpreter) eval(node ASTNode, env *Environment) Value {
 		}
 
 	case *BreakStmt:
-		panic(&breakSignal{})
+		panic(&breakSignal{Label: n.Label})
 
 	case *ContinueStmt:
-		panic(&continueSignal{})
+		panic(&continueSignal{Label: n.Label})
 
 	case *ReturnStmt:
 		val := interp.eval(n.Value, env)
@@ -1560,6 +1685,14 @@ func (interp *Interpreter) eval(node ASTNode, env *Environment) Value {
 		return Value{Kind: "nil"}
 
 	case *FuncDef:
+		if n.RecvType != "" {
+			if env.methods[n.RecvType] == nil {
+				env.methods[n.RecvType] = make(map[string]*FuncDef)
+			}
+			env.methods[n.RecvType][n.Name] = n
+		} else {
+			env.funcs[n.Name] = n
+		}
 		return Value{Kind: "nil"}
 
 	case *FuncLit:
@@ -1610,15 +1743,23 @@ func (interp *Interpreter) eval(node ASTNode, env *Environment) Value {
 func (interp *Interpreter) evalTopLevel(stmt ASTNode, env *Environment) (out Value) {
 	defer func() {
 		if r := recover(); r != nil {
-			switch r.(type) {
+			switch sig := r.(type) {
 			case *breakSignal:
-				fmt.Fprintf(os.Stderr, "Runtime error: 'break' outside loop\n")
+				if sig.Label != "" {
+					fmt.Fprintf(os.Stderr, "Runtime error: 'break %s' outside loop\n", sig.Label)
+				} else {
+					fmt.Fprintf(os.Stderr, "Runtime error: 'break' outside loop\n")
+				}
 			case *continueSignal:
-				fmt.Fprintf(os.Stderr, "Runtime error: 'continue' outside loop\n")
+				if sig.Label != "" {
+					fmt.Fprintf(os.Stderr, "Runtime error: 'continue %s' outside loop\n", sig.Label)
+				} else {
+					fmt.Fprintf(os.Stderr, "Runtime error: 'continue' outside loop\n")
+				}
 			case *returnValue:
 				fmt.Fprintf(os.Stderr, "Runtime error: 'return' outside function\n")
 			case *runtimeError:
-				fmt.Fprintf(os.Stderr, "%s\n", r.(*runtimeError).msg)
+				fmt.Fprintf(os.Stderr, "%s\n", sig.msg)
 			default:
 				panic(r)
 			}
@@ -1644,9 +1785,13 @@ type returnValue struct {
 	val Value
 }
 
-type breakSignal struct{}
+type breakSignal struct {
+	Label string
+}
 
-type continueSignal struct{}
+type continueSignal struct {
+	Label string
+}
 
 // runtimeError is a catchable script failure. All interpreter error paths
 // panic with it instead of calling os.Exit, so try/catch can intercept;
@@ -1658,6 +1803,11 @@ type runtimeError struct {
 func fail(format string, args ...interface{}) {
 	msg := fmt.Sprintf(format, args...)
 	msg = strings.TrimSuffix(msg, "\n")
+	if activeInterp != nil {
+		for _, f := range activeInterp.frames {
+			msg += "\n  at " + f
+		}
+	}
 	panic(&runtimeError{msg: msg})
 }
 
@@ -1678,12 +1828,8 @@ func (interp *Interpreter) evalFor(node *ForLoop, env *Environment) Value {
 		func() {
 			defer func() {
 				if r := recover(); r != nil {
-					if _, ok := r.(*breakSignal); ok {
-						hitBreak = true
-						return
-					}
-					// continue: выходим из итерации, post ниже всё равно выполнится
-					if _, ok := r.(*continueSignal); ok {
+					if isBreak, mine := loopSignal(r, node.Label); mine {
+						hitBreak = isBreak
 						return
 					}
 					panic(r)
@@ -1715,11 +1861,8 @@ func (interp *Interpreter) evalForIn(node *ForIn, env *Environment) Value {
 		func() {
 			defer func() {
 				if r := recover(); r != nil {
-					if _, ok := r.(*breakSignal); ok {
-						hitBreak = true
-						return
-					}
-					if _, ok := r.(*continueSignal); ok {
+					if isBreak, mine := loopSignal(r, node.Label); mine {
+						hitBreak = isBreak
 						return
 					}
 					panic(r)
@@ -1792,6 +1935,19 @@ func (interp *Interpreter) evalSliceBounds(start, end ASTNode, env *Environment,
 	return s, e
 }
 
+// loopSignal matches a recovered break/continue against this loop's label.
+// Unlabeled signals hit the innermost loop; labeled ones fly past loops
+// with other labels. Returns (isBreak, mine).
+func loopSignal(r interface{}, label string) (bool, bool) {
+	if bs, ok := r.(*breakSignal); ok {
+		return true, bs.Label == "" || bs.Label == label
+	}
+	if cs, ok := r.(*continueSignal); ok {
+		return false, cs.Label == "" || cs.Label == label
+	}
+	return false, false
+}
+
 func (interp *Interpreter) evalWhile(node *WhileLoop, env *Environment) Value {
 	lastVal := Value{Kind: "nil"}
 	for isTruthy(interp.eval(node.Condition, env)) {
@@ -1799,12 +1955,8 @@ func (interp *Interpreter) evalWhile(node *WhileLoop, env *Environment) Value {
 		func() {
 			defer func() {
 				if r := recover(); r != nil {
-					if _, ok := r.(*breakSignal); ok {
-						hitBreak = true
-						return
-					}
-					// continue: просто прерываем текущую итерацию
-					if _, ok := r.(*continueSignal); ok {
+					if isBreak, mine := loopSignal(r, node.Label); mine {
+						hitBreak = isBreak
 						return
 					}
 					// return и прочее — пробрасываем выше
@@ -2512,6 +2664,10 @@ func (interp *Interpreter) evalFuncCall(call *FuncCall, env *Environment) (resul
 // closures). Shared by plain calls, function values and methods.
 func (interp *Interpreter) invokeUserFunc(fn *FuncDef, frameParent *Environment, argVals []Value, callerName string) (result Value) {
 	fnEnv := NewEnvironment(frameParent)
+	interp.frames = append(interp.frames, callerName)
+	defer func() {
+		interp.frames = interp.frames[:len(interp.frames)-1]
+	}()
 	for i, param := range fn.Params {
 		if i < len(argVals) {
 			fnEnv.setVar(param, argVals[i])
@@ -2991,6 +3147,13 @@ func (interp *Interpreter) evalBinaryOp(left Value, op string, right Value) Valu
 }
 
 func valuesEqual(a, b Value) bool {
+	return valuesEqualDepth(a, b, 0)
+}
+
+func valuesEqualDepth(a, b Value, depth int) bool {
+	if depth > 50 {
+		return false
+	}
 	if a.Kind != b.Kind {
 		return false
 	}
@@ -3005,6 +3168,38 @@ func valuesEqual(a, b Value) bool {
 		return true
 	case "func":
 		return a.Fn == b.Fn
+	case "array":
+		if len(a.Items) != len(b.Items) {
+			return false
+		}
+		for i := range a.Items {
+			if !valuesEqualDepth(a.Items[i], b.Items[i], depth+1) {
+				return false
+			}
+		}
+		return true
+	case "map":
+		if len(a.MapVal) != len(b.MapVal) {
+			return false
+		}
+		for k, av := range a.MapVal {
+			bv, ok := b.MapVal[k]
+			if !ok || !valuesEqualDepth(av, bv, depth+1) {
+				return false
+			}
+		}
+		return true
+	case "struct":
+		if a.TypeName != b.TypeName || len(a.Fields) != len(b.Fields) {
+			return false
+		}
+		for k, av := range a.Fields {
+			bv, ok := b.Fields[k]
+			if !ok || !valuesEqualDepth(av, bv, depth+1) {
+				return false
+			}
+		}
+		return true
 	default:
 		return false
 	}
@@ -3472,6 +3667,7 @@ func runReplSnippet(interp *Interpreter, src string) {
 
 func repl() {
 	interp := NewInterpreter()
+	activeInterp = interp
 	if cwd, err := os.Getwd(); err == nil {
 		interp.mainDir = cwd
 	}
@@ -3751,6 +3947,7 @@ func main() {
 	ast := parser.ParseProgram()
 
 	interp := NewInterpreter()
+	activeInterp = interp
 	abs, err := filepath.Abs(sourceFile)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Ошибка пути %s: %v\n", sourceFile, err)
