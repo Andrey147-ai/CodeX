@@ -1,0 +1,14 @@
+// Tiny web server: one handler for every route.
+// Run: ..\codex.exe server.cx   then open http://127.0.0.1:8080/hi
+fn hello(req) {
+    if req["path"] == "/hi" {
+        return "hi there"
+    }
+    if req["path"] == "/echo" {
+        return {"status": 200, "body": "you sent: " + req["body"]}
+    }
+    return {"status": 404, "body": "try /hi or POST /echo"}
+}
+
+print("serving on 127.0.0.1:8080")
+http_listen(8080, hello)

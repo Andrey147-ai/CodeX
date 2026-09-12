@@ -164,6 +164,7 @@ import "Andrey147-ai/strutils@v1.2.0"
 | `append_file(p, t)` | Append to file | `append_file("o.txt", t)` |
 | `exists(p)` | Path check | `exists("o.txt")` |
 | `http_get(url)` | Fetch URL body | `http_get("https://example.com")` |
+| `http_listen(port, fn)` | Serve HTTP, handler gets map | `http_listen(8080, hello)` |
 | `sleep(ms)` | Millisecond pause | `sleep(50)` |
 | `pkgdir(spec)` | Local path of a GitHub repo | `pkgdir("user/data")` |
 | `type(x)` | Runtime type name | `type([1])` → `"array"` |
@@ -201,7 +202,8 @@ Rules:
 
 In `examples/`: `raid.cx` and `shop_game.cx` (games), `inventory.cx`,
 `logstat.cx` (log analyzer, try `..\codex.exe logstat.cx app.log`),
-`methods.cx`, `stdlib.cx`, `showcase.cx`, `useimport.cx`, `badapple.cx`.
+`methods.cx`, `stdlib.cx`, `showcase.cx`, `useimport.cx`, `badapple.cx`,
+`server.cx` (web server, try `..\codex.exe server.cx`).
 
 ## Building from source
 
@@ -219,7 +221,7 @@ GitHub Actions on Ubuntu + Windows.
 Done so far — comparisons and logic, correct precedence, `while` /
 `for` / `for-in` with `break` / `continue`, arrays, dictionaries,
 struct methods, files, HTTP, packages, terminal control, `%` / `div`,
-slices, first-class functions and closures. Up next:
+slices, first-class functions and closures, `http_listen` web server. Up next:
 
 * [ ] Built-in lightweight networking library for backends (`http_listen`)
 * [ ] Your idea — open an issue

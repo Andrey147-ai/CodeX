@@ -1405,6 +1405,10 @@ func (interp *Interpreter) eval(node ASTNode, env *Environment) Value {
 		if val, ok := env.getVar(n.Name); ok {
 			return val
 		}
+		// named function referenced as a value (handler := hello)
+		if fn, ok := env.getFunc(n.Name); ok {
+			return Value{Kind: "func", Fn: fn, Closure: interp.globalEnv}
+		}
 		fail("Runtime error: undefined variable '%s'\n", n.Name)
 
 	case *BinaryOp:
@@ -2032,6 +2036,74 @@ func (interp *Interpreter) evalFuncCall(call *FuncCall, env *Environment) (resul
 			items = append(items, Value{Kind: "string", StrVal: a})
 		}
 		return Value{Kind: "array", Items: items}
+	}
+
+	if call.Name == "http_listen" {
+		if len(call.Args) != 2 {
+			fail("Runtime error: http_listen() takes exactly 2 arguments (port, handler)\n")
+		}
+		portVal := interp.eval(call.Args[0], env)
+		if portVal.Kind != "number" {
+			fail("Runtime error: http_listen() port must be a number, got %s\n", portVal.Kind)
+		}
+		handler := interp.eval(call.Args[1], env)
+		if handler.Kind != "func" {
+			fail("Runtime error: http_listen() handler must be a function, got %s\n", handler.Kind)
+		}
+		fnDef := handler.Fn
+		closure := handler.Closure
+		if closure == nil {
+			closure = interp.globalEnv
+		}
+		mux := http.NewServeMux()
+		mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+			defer func() {
+				if rec := recover(); rec != nil {
+					msg := "handler crash"
+					if re, ok := rec.(*runtimeError); ok {
+						msg = re.msg
+					}
+					http.Error(w, msg, http.StatusInternalServerError)
+				}
+			}()
+			body, _ := io.ReadAll(io.LimitReader(r.Body, 1<<20))
+			r.Body.Close()
+			query := make(map[string]Value)
+			for k, vs := range r.URL.Query() {
+				if len(vs) > 0 {
+					query[k] = Value{Kind: "string", StrVal: vs[0]}
+				}
+			}
+			reqVal := Value{Kind: "map", MapVal: map[string]Value{
+				"method": Value{Kind: "string", StrVal: r.Method},
+				"path":   Value{Kind: "string", StrVal: r.URL.Path},
+				"query":  Value{Kind: "map", MapVal: query},
+				"body":   Value{Kind: "string", StrVal: string(body)},
+			}}
+			res := interp.invokeUserFunc(fnDef, closure, []Value{reqVal}, "http-handler")
+			status := 200
+			out := ""
+			if res.Kind == "string" {
+				out = res.StrVal
+			} else if res.Kind == "map" {
+				if st, ok := res.MapVal["status"]; ok && st.Kind == "number" {
+					status = int(st.NumVal)
+				}
+				if b, ok := res.MapVal["body"]; ok {
+					out = valueToString(b)
+				}
+			} else if res.Kind != "nil" {
+				out = valueToString(res)
+			}
+			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+			w.WriteHeader(status)
+			w.Write([]byte(out))
+		})
+		addr := fmt.Sprintf("127.0.0.1:%d", int(portVal.NumVal))
+		if err := http.ListenAndServe(addr, mux); err != nil {
+			fail("Runtime error: http_listen() failed: %v\n", err)
+		}
+		return Value{Kind: "nil"}
 	}
 
 	if call.Name == "http_get" {
