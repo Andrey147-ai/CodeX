@@ -263,3 +263,7 @@ slices, first-class functions and closures, `http_listen` web server. Up next:
 
 * [ ] Built-in lightweight networking library for backends (`http_listen`)
 * [ ] Your idea — open an issue
+
+## 📄 License
+
+MIT — see [LICENSE](LICENSE). Use it anywhere, just keep the notice.
