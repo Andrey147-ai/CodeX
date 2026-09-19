@@ -1,8 +1,18 @@
 # CodeX
 
 A small programming language written from scratch in Go. One file of
-interpreter, zero dependencies — grab `codex.exe` from
-[Releases](../../releases) and run `.cx` scripts anywhere.
+interpreter, zero dependencies — install in one command or grab
+`codex.exe` from [Releases](../../releases) and run `.cx` scripts anywhere.
+
+```powershell
+# Windows (PowerShell)
+irm https://raw.githubusercontent.com/Andrey147-ai/CodeX/main/install.ps1 | iex
+```
+
+```sh
+# Linux / macOS
+curl -fsSL https://raw.githubusercontent.com/Andrey147-ai/CodeX/main/install.sh | sh
+```
 
 > I'm Andrey, 16, from Kazakhstan. I started CodeX to figure out how
 > programming languages actually work inside — lexer, parser, runtime,
