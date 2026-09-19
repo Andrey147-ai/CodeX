@@ -3906,13 +3906,22 @@ func pkgEntryFile(dest string, spec pkgSpec) (string, error) {
 		if !strings.HasPrefix(filepath.Clean(p), filepath.Clean(dest)) {
 			return "", fmt.Errorf("path escapes package: %s", spec.file)
 		}
-		if !strings.HasSuffix(strings.ToLower(p), ".cx") {
-			return "", fmt.Errorf("package file must end with .cx: %s", spec.file)
+		// Explicit file: .../lib/text.cx
+		if strings.HasSuffix(strings.ToLower(spec.file), ".cx") {
+			if _, err := os.Stat(p); err != nil {
+				return "", fmt.Errorf("no such file %s in %s/%s", spec.file, spec.user, spec.repo)
+			}
+			return p, nil
 		}
-		if _, err := os.Stat(p); err != nil {
-			return "", fmt.Errorf("no such file %s in %s/%s", spec.file, spec.user, spec.repo)
+		// Subdirectory: .../packages/strutils -> main.cx, <dir>.cx, lib.cx
+		base := filepath.Base(filepath.Clean(p))
+		for _, c := range []string{"main.cx", base + ".cx", "lib.cx"} {
+			cand := filepath.Join(p, c)
+			if _, err := os.Stat(cand); err == nil {
+				return cand, nil
+			}
 		}
-		return p, nil
+		return "", fmt.Errorf("package dir %s in %s/%s has no entry (add main.cx)", spec.file, spec.user, spec.repo)
 	}
 	for _, c := range []string{"main.cx", spec.repo + ".cx", "lib.cx"} {
 		p := filepath.Join(dest, c)
