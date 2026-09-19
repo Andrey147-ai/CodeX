@@ -2,6 +2,7 @@
 import "../packages/strutils/main.cx"
 import "../packages/mathx/main.cx"
 import "../packages/apix/main.cx"
+import "../packages/csvx/main.cx"
 assert(slug("  Hello World ") == "hello-world", "slug")
 assert(shout("hi") == "HI!", "shout")
 assert(excerpt("abcdef", 3) == "abc...", "excerpt")
@@ -10,3 +11,6 @@ assert(percent(1, 4) == 25, "percent")
 assert(ok("hi")["status"] == 200, "apix ok")
 assert(not_found()["status"] == 404, "apix 404")
 assert(json_ok({"a": 1})["status"] == 200, "apix json")
+rows := parse("a,b\nc,d", ",")
+assert(rows == [["a", "b"], ["c", "d"]], "csvx parse")
+assert(stringify(rows, ",") == "a,b\nc,d", "csvx stringify")

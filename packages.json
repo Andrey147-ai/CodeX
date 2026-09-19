@@ -16,6 +16,11 @@
       "name": "Andrey147-ai/CodeX/packages/apix",
       "description": "Tiny HTTP handler helpers: ok, not_found, json_ok.",
       "tags": ["http", "backend", "json"]
+    },
+    {
+      "name": "Andrey147-ai/CodeX/packages/csvx",
+      "description": "Tiny CSV helpers: parse, stringify (simple split, no quotes).",
+      "tags": ["csv", "files", "data"]
     }
   ]
 }

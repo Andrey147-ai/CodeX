@@ -272,6 +272,7 @@ import "./mylib.cx"                            // local file
 import "Andrey147-ai/CodeX/packages/strutils"  // official: slug/shout/excerpt
 import "Andrey147-ai/CodeX/packages/mathx"     // official: lerp/percent/dice
 import "Andrey147-ai/CodeX/packages/apix"      // official: ok/not_found/json_ok
+import "Andrey147-ai/CodeX/packages/csvx"      // official: parse/stringify
 import "Andrey147-ai/strutils@v1.2.0"          // pinned tag or branch
 import "Andrey147-ai/strutils/lib/text.cx"     // explicit file in repo
 ```

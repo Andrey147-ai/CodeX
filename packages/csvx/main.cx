@@ -1,0 +1,18 @@
+// csvx: tiny CSV helpers (no quotes/escapes, simple split).
+// Use: import "Andrey147-ai/CodeX/packages/csvx"
+fn parse(text, sep) {
+    rows := []
+    for line in lines(text) {
+        if trim(line) != "" {
+            push(rows, split(line, sep))
+        }
+    }
+    return rows
+}
+fn stringify(rows, sep) {
+    out := []
+    for r in rows {
+        push(out, join(r, sep))
+    }
+    return join(out, "\n")
+}
