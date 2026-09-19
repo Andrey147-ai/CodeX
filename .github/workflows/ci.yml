@@ -49,6 +49,9 @@ jobs:
         shell: bash
         run: |
           ./codex${{ runner.os == 'Windows' && '.exe' || '' }} help
+          ./codex${{ runner.os == 'Windows' && '.exe' || '' }} list
+          ./codex${{ runner.os == 'Windows' && '.exe' || '' }} search http
+          ./codex${{ runner.os == 'Windows' && '.exe' || '' }} info mathx
           ./codex${{ runner.os == 'Windows' && '.exe' || '' }} fmt examples/guess.cx > /dev/null
           ./codex${{ runner.os == 'Windows' && '.exe' || '' }} fmt examples/mini_api.cx > /dev/null
           ./codex${{ runner.os == 'Windows' && '.exe' || '' }} fmt examples/diary.cx > /dev/null

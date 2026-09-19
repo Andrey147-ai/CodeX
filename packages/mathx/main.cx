@@ -1,0 +1,14 @@
+// mathx: tiny math helpers over builtins.
+// Use: import "Andrey147-ai/CodeX/packages/mathx"
+fn lerp(a, b, t) {
+    return a + (b - a) * t
+}
+fn percent(part, total) {
+    if total == 0 {
+        return 0
+    }
+    return part / total * 100
+}
+fn dice() {
+    return randint(1, 6)
+}

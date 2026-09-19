@@ -1,0 +1,12 @@
+// Catalog: bundled packages import relatively, no network needed.
+import "../packages/strutils/main.cx"
+import "../packages/mathx/main.cx"
+import "../packages/apix/main.cx"
+assert(slug("  Hello World ") == "hello-world", "slug")
+assert(shout("hi") == "HI!", "shout")
+assert(excerpt("abcdef", 3) == "abc...", "excerpt")
+assert(lerp(0, 10, 0.5) == 5, "lerp")
+assert(percent(1, 4) == 25, "percent")
+assert(ok("hi")["status"] == 200, "apix ok")
+assert(not_found()["status"] == 404, "apix 404")
+assert(json_ok({"a": 1})["status"] == 200, "apix json")

@@ -1,0 +1,21 @@
+{
+  "registry": "codex",
+  "version": 1,
+  "packages": [
+    {
+      "name": "Andrey147-ai/CodeX/packages/strutils",
+      "description": "Tiny string helpers: slug, shout, excerpt.",
+      "tags": ["strings", "text", "beginner"]
+    },
+    {
+      "name": "Andrey147-ai/CodeX/packages/mathx",
+      "description": "Tiny math helpers: lerp, percent, dice.",
+      "tags": ["math", "games", "beginner"]
+    },
+    {
+      "name": "Andrey147-ai/CodeX/packages/apix",
+      "description": "Tiny HTTP handler helpers: ok, not_found, json_ok.",
+      "tags": ["http", "backend", "json"]
+    }
+  ]
+}

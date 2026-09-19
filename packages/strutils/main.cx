@@ -1,0 +1,15 @@
+// strutils: tiny string helpers. No imports needed.
+// Use: import "Andrey147-ai/CodeX/packages/strutils"
+// Local: import "./packages/strutils/main.cx" (from repo root)
+fn slug(s) {
+    return lower(replace(trim(s), " ", "-"))
+}
+fn shout(s) {
+    return upper(s) + "!"
+}
+fn excerpt(s, n) {
+    if len(s) > n {
+        return s[0: n] + "..."
+    }
+    return s
+}
