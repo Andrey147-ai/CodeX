@@ -3043,6 +3043,168 @@ func (interp *Interpreter) evalFuncCall(call *FuncCall, env *Environment) (resul
 		return Value{Kind: "nil"}
 	}
 
+	if call.Name == "copy_file" {
+		if len(call.Args) != 2 {
+			fail("Runtime error: copy_file() takes exactly 2 arguments (src, dst)\n")
+		}
+		src := interp.eval(call.Args[0], env)
+		dst := interp.eval(call.Args[1], env)
+		if src.Kind != "string" || dst.Kind != "string" {
+			fail("Runtime error: copy_file() needs (string, string)\n")
+		}
+		data, err := os.ReadFile(src.StrVal)
+		if err != nil {
+			fail("Runtime error: copy_file() read failed: %v\n", err)
+		}
+		if err := os.WriteFile(dst.StrVal, data, 0644); err != nil {
+			fail("Runtime error: copy_file() write failed: %v\n", err)
+		}
+		return Value{Kind: "number", NumVal: float64(len(data))}
+	}
+
+	if call.Name == "basename" {
+		if len(call.Args) != 1 {
+			fail("Runtime error: basename() takes exactly 1 argument\n")
+		}
+		p := interp.eval(call.Args[0], env)
+		if p.Kind != "string" {
+			fail("Runtime error: basename() needs a string, got %s\n", p.Kind)
+		}
+		return Value{Kind: "string", StrVal: filepath.Base(p.StrVal)}
+	}
+
+	if call.Name == "join_path" {
+		if len(call.Args) != 2 {
+			fail("Runtime error: join_path() takes exactly 2 arguments (a, b)\n")
+		}
+		a := interp.eval(call.Args[0], env)
+		b := interp.eval(call.Args[1], env)
+		if a.Kind != "string" || b.Kind != "string" {
+			fail("Runtime error: join_path() needs (string, string)\n")
+		}
+		return Value{Kind: "string", StrVal: filepath.Join(a.StrVal, b.StrVal)}
+	}
+
+	if call.Name == "trim_prefix" || call.Name == "trim_suffix" {
+		if len(call.Args) != 2 {
+			fail("Runtime error: %s() takes exactly 2 arguments (s, affix)\n", call.Name)
+		}
+		s := interp.eval(call.Args[0], env)
+		aff := interp.eval(call.Args[1], env)
+		if s.Kind != "string" || aff.Kind != "string" {
+			fail("Runtime error: %s() needs (string, string)\n", call.Name)
+		}
+		if call.Name == "trim_prefix" {
+			return Value{Kind: "string", StrVal: strings.TrimPrefix(s.StrVal, aff.StrVal)}
+		}
+		return Value{Kind: "string", StrVal: strings.TrimSuffix(s.StrVal, aff.StrVal)}
+	}
+
+	if call.Name == "pad_left" || call.Name == "pad_right" {
+		if len(call.Args) < 2 || len(call.Args) > 3 {
+			fail("Runtime error: %s() takes 2-3 arguments (s, width[, pad])\n", call.Name)
+		}
+		s := interp.eval(call.Args[0], env)
+		w := interp.eval(call.Args[1], env)
+		if s.Kind != "string" || w.Kind != "number" {
+			fail("Runtime error: %s() needs (string, number[, string])\n", call.Name)
+		}
+		pad := " "
+		if len(call.Args) == 3 {
+			pv := interp.eval(call.Args[2], env)
+			if pv.Kind != "string" || len([]rune(pv.StrVal)) != 1 {
+				fail("Runtime error: %s() pad must be a single char\n", call.Name)
+			}
+			pad = pv.StrVal
+		}
+		width := int(w.NumVal)
+		if width < 0 {
+			fail("Runtime error: %s() width must be >= 0\n", call.Name)
+		}
+		rs := []rune(s.StrVal)
+		if len(rs) >= width {
+			return Value{Kind: "string", StrVal: s.StrVal}
+		}
+		fill := strings.Repeat(pad, width-len(rs))
+		if call.Name == "pad_left" {
+			return Value{Kind: "string", StrVal: fill + s.StrVal}
+		}
+		return Value{Kind: "string", StrVal: s.StrVal + fill}
+	}
+
+	if call.Name == "clamp" {
+		if len(call.Args) != 3 {
+			fail("Runtime error: clamp() takes exactly 3 arguments (x, lo, hi)\n")
+		}
+		x := interp.eval(call.Args[0], env)
+		lo := interp.eval(call.Args[1], env)
+		hi := interp.eval(call.Args[2], env)
+		if x.Kind != "number" || lo.Kind != "number" || hi.Kind != "number" {
+			fail("Runtime error: clamp() needs numbers\n")
+		}
+		v := x.NumVal
+		if v < lo.NumVal {
+			v = lo.NumVal
+		}
+		if v > hi.NumVal {
+			v = hi.NumVal
+		}
+		return Value{Kind: "number", NumVal: v}
+	}
+
+	if call.Name == "sorted" {
+		if len(call.Args) != 1 {
+			fail("Runtime error: sorted() takes exactly 1 argument\n")
+		}
+		arr := interp.eval(call.Args[0], env)
+		if arr.Kind != "array" {
+			fail("Runtime error: sorted() needs an array, got %s\n", arr.Kind)
+		}
+		out := make([]Value, len(arr.Items))
+		copy(out, arr.Items)
+		if len(out) > 0 {
+			switch out[0].Kind {
+			case "number":
+				for _, item := range out {
+					if item.Kind != "number" {
+						fail("Runtime error: sorted() needs uniformly typed array\n")
+					}
+				}
+				sort.Slice(out, func(a, b int) bool { return out[a].NumVal < out[b].NumVal })
+			case "string":
+				for _, item := range out {
+					if item.Kind != "string" {
+						fail("Runtime error: sorted() needs uniformly typed array\n")
+					}
+				}
+				sort.Slice(out, func(a, b int) bool { return out[a].StrVal < out[b].StrVal })
+			default:
+				fail("Runtime error: sorted() supports numbers and strings\n")
+			}
+		}
+		return Value{Kind: "array", Items: out}
+	}
+
+	if call.Name == "zip" {
+		if len(call.Args) != 2 {
+			fail("Runtime error: zip() takes exactly 2 arguments (a, b)\n")
+		}
+		a := interp.eval(call.Args[0], env)
+		b := interp.eval(call.Args[1], env)
+		if a.Kind != "array" || b.Kind != "array" {
+			fail("Runtime error: zip() needs (array, array)\n")
+		}
+		n := len(a.Items)
+		if len(b.Items) < n {
+			n = len(b.Items)
+		}
+		out := make([]Value, 0, n)
+		for i := 0; i < n; i++ {
+			out = append(out, Value{Kind: "array", Items: []Value{a.Items[i], b.Items[i]}})
+		}
+		return Value{Kind: "array", Items: out}
+	}
+
 	if call.Name == "rand" {
 		if len(call.Args) != 0 {
 			fail("Runtime error: rand() takes no arguments\n")

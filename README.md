@@ -197,11 +197,15 @@ import "Andrey147-ai/strutils@v1.2.0"
 | `upper/lower(s)` | String case | `upper("hi")` → `"HI"` |
 | `contains(s, sub)` | Substring check | `contains(s, "err")` |
 | `split(s, sep)` | Split to array | `split("a,b", ",")` |
+| `trim_prefix/trim_suffix` | Strip affix | `trim_prefix("hi!","hi")` |
+| `pad_left/pad_right` | Pad to width | `pad_left("7",3)` → `"  7"` |
 | `lines(s)` | Split by newlines | `lines("a\nb")` |
 | `index_of(s, sub)` | Rune index or -1 | `index_of("hi","i")` → `1` |
 | `count(s, sub)` | Count occurrences | `count("aaa","a")` → `3` |
 | `join(arr, sep)` | Join array to string | `join(["a"], "-")` |
 | `read_file(p)` | Read whole file | `read_file("app.log")` |
+| `copy_file(s, d)` | Copy file, returns bytes | `copy_file("a","b")` |
+| `basename(p)/join_path(a,b)` | Path helpers | `basename("a/x.cx")` |
 | `cwd()` | Current directory | `cwd()` |
 | `is_dir(p)` | Directory check | `is_dir(".")` |
 | `file_size(p)` | File size in bytes | `file_size("a.txt")` |
@@ -225,6 +229,9 @@ import "Andrey147-ai/strutils@v1.2.0"
 | `abs/sqrt/pow/min/max/floor/ceil/round` | Math | `sqrt(16)` → `4` |
 | `s[i]` | String char (negatives ok) | `"hi"[-1]` → `"i"` |
 | `range(a, b)` | Number array | `range(3)` → `[0,1,2]` |
+| `clamp(x, lo, hi)` | Clamp number | `clamp(99,1,10)` → `10` |
+| `sorted(arr)` | Sorted copy (keeps orig) | `sorted([3,1])` → `[1,3]` |
+| `zip(a, b)` | Pair up arrays | `zip([1],["a"])` |
 | `sum/avg(arr)` | Number stats | `sum([1,2])` → `3` |
 | `unique(arr)` | Dedup, order kept | `unique([1,1,2])` → `[1,2]` |
 | `extend(a, b)` | Append all of b to a | `extend(a, [2])` |
