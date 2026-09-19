@@ -3,108 +3,153 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="description" content="CodeX — легкий язык программирования: один exe, игры, файлы, JSON, HTTP.">
+<meta name="description" content="CodeX — легкий язык программирования: один exe, ноль зависимостей. Первая игра за 15 минут, файлы, JSON, HTTP-сервер, 76 функций.">
 <title>CodeX — лёгкий язык программирования</title>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
+<div class="orb orb-a"></div>
+<div class="orb orb-b"></div>
+
 <header class="nav">
   <div class="wrap nav-in">
-    <span class="logo">CodeX <small>v0.22</small></span>
+    <a class="logo" href="#top">CodeX <small>v0.22 · MIT</small></a>
     <nav>
+      <a href="#why">Почему</a>
       <a href="#start">Старт</a>
       <a href="#examples">Примеры</a>
       <a href="#stdlib">Функции</a>
       <a href="#docs">Уроки</a>
-      <a href="https://github.com/Andrey147-ai/CodeX">GitHub</a>
+      <a class="gh" href="https://github.com/Andrey147-ai/CodeX">★ GitHub</a>
     </nav>
   </div>
 </header>
 
-<section class="hero">
-  <div class="wrap">
-    <h1>Язык, который запускается за 15 минут</h1>
-    <p>Один <code>codex.exe</code>, ноль зависимостей. Переменные, игры, файлы, JSON, HTTP-сервер — без фреймворков.</p>
+<section class="hero wrap" id="top">
+  <div class="hero-txt reveal">
+    <div class="badge"><span class="dot"></span> v0.22 · собран на Go · ноль зависимостей</div>
+    <h1>Первая игра — <span class="grad">через 15 минут</span>, бэкенд — через 10 строк</h1>
+    <p class="lead">CodeX — маленький язык, который читается как псевдокод, а работает как настоящий: переменные, массивы, структуры, файлы, JSON, HTTP-сервер, параллельность. Один <code>codex.exe</code> — и можно писать игры, ботов, API и скрипты для учебы.</p>
     <div class="btns">
       <a class="btn primary" href="https://github.com/Andrey147-ai/CodeX/releases">Скачать codex.exe</a>
-      <a class="btn" href="#start">Быстрый старт</a>
+      <a class="btn" href="#start">Быстрый старт ↓</a>
     </div>
-    <pre class="code"><code>codex.exe new hello.cx
-codex.exe hello.cx</code></pre>
+    <div class="stats">
+      <div><b>15 мин</b><span>до первой игры</span></div>
+      <div><b>~76</b><span>функций из коробки</span></div>
+      <div><b>0</b><span>зависимостей</span></div>
+      <div><b>11</b><span>туториалов</span></div>
+    </div>
+  </div>
+  <div class="hero-code reveal">
+    <div class="win">
+      <div class="win-bar"><i></i><i></i><i></i><span>hello.cx — живой пример</span><button class="copy" data-copy="hero">копировать</button></div>
+      <pre><code id="hero-code">name := input("Как тебя зовут? ")
+print("Привет, " + name + "!")
+
+scores := [90, 80, 100]
+print("Средний балл: ", sum(scores) / len(scores))
+
+fn double(n) {
+    return n * 2
+}
+print("double(21) = ", double(21))</code></pre>
+    </div>
+    <div class="term"><span class="prompt">$</span> <span id="typed"></span><span class="caret">▍</span></div>
+  </div>
+</section>
+
+<section id="why" class="wrap">
+  <h2 class="reveal">Почему CodeX, а не «очередной Python»</h2>
+  <div class="cards">
+    <div class="card reveal"><h3>📖 Читается как мысли</h3><p><code>x := 5</code>, <code>for s in scores</code>, <code>if hp &gt; 0</code> — без двоеточий, отступов-ловушек и 10 способов сделать одно и то же.</p></div>
+    <div class="card reveal"><h3>🔋 Батарейки внутри</h3><p>Строки, массивы, мапы, файлы, JSON, HTTP, случайность, математика, каналы — учить импорты не надо, все уже есть.</p></div>
+    <div class="card reveal"><h3>🌐 Бэкенд без фреймворков</h3><p><code>http_listen(8081, hello)</code> — и у тебя JSON API. Хендлер получает мапу запроса, возвращает строку или <code>{status, body}</code>.</p></div>
+    <div class="card reveal"><h3>🛠 Инструменты новичка</h3><p>REPL, <code>codex fmt</code>, <code>fmt --check</code>, <code>codex test</code> с <code>assert</code>, <code>codex new</code>, подсветка VS Code.</p></div>
   </div>
 </section>
 
 <section id="start" class="wrap">
-  <h2>Старт за 3 команды</h2>
-  <pre class="code"><code>codex.exe new hello.cx   # шаблон новичка
-codex.exe hello.cx       # запуск
-codex.exe test tests     # тесты с assert()</code></pre>
-  <pre class="code"><code>// hello.cx
-name := input("Как тебя зовут? ")
-print("Привет, " + name + "!")
-scores := [90, 80, 100]
-total := sum(scores)
-print("Средний балл: ", total / len(scores))</code></pre>
+  <h2 class="reveal">Старт за 3 команды</h2>
+  <div class="steps">
+    <div class="step reveal"><b>1</b><p><code>codex.exe new hello.cx</code><br><span>создает шаблон с вводом, циклом и функцией</span></p></div>
+    <div class="step reveal"><b>2</b><p><code>codex.exe hello.cx</code><br><span>запускает скрипт где угодно</span></p></div>
+    <div class="step reveal"><b>3</b><p><code>codex.exe test tests</code><br><span>прогоняет тесты с assert()</span></p></div>
+  </div>
 </section>
 
 <section id="examples" class="wrap">
-  <h2>Примеры</h2>
-  <div class="tabs">
-    <button data-tab="guess" class="active">Игра</button>
-    <button data-tab="api">Бэкенд</button>
-    <button data-tab="funcs">Функции</button>
+  <h2 class="reveal">Три вечера — три программы</h2>
+  <div class="tabs reveal">
+    <button data-tab="guess" class="active">🎮 Игра: угадай число</button>
+    <button data-tab="api">🌐 API за 10 строк</button>
+    <button data-tab="funcs">⚡ Python-стиль</button>
   </div>
-  <pre class="code" id="tab-guess"><code>secret := randint(1, 100)
+  <div class="win reveal">
+    <div class="win-bar"><i></i><i></i><i></i><span id="tab-name">guess.cx</span><button class="copy" data-copy="tab">копировать</button></div>
+    <pre><code id="tab-guess">secret := randint(1, 100)
 tries := 0
+print("Я загадал 1..100. Справишься?")
 while true {
     guess := num(input("Твой вариант: "))
     tries += 1
-    if guess == secret { print("Точно за ", tries); break }
-    else if guess < secret { print("Бери больше") }
-    else { print("Бери меньше") }
+    if guess == secret {
+        print("Точно! Это " + str(secret) + " за " + str(tries))
+        break
+    } else if guess < secret {
+        print("Бери больше")
+    } else {
+        print("Бери меньше")
+    }
 }</code></pre>
-  <pre class="code hidden" id="tab-api"><code>fn hello(req) {
+    <pre class="hidden"><code id="tab-api">fn hello(req) {
     if req["path"] == "/hi" {
         return to_json({"hi": "there", "time": date()})
     }
     return {"status": 404, "body": "try /hi"}
 }
+print("API on 127.0.0.1:8081/hi")
 http_listen(8081, hello)</code></pre>
-  <pre class="code hidden" id="tab-funcs"><code>scores := [5, 3, 5, 2, 3]
+    <pre class="hidden"><code id="tab-funcs">scores := [5, 3, 5, 2, 3]
 print(sum(scores), avg(scores), unique(scores))
+users := {"ann": 90, "bob": 70}
+print(keys(users), values(users))
 print(reduce(scores, add, 0))
-print(find(scores, big), any(scores, big), all(scores, big))
-print(chr(65), ord("A"), cwd(), clock())</code></pre>
-  <p class="muted">Все файлы лежат в <code>examples/</code>: <code>guess.cx</code>, <code>mini_api.cx</code>, <code>todo_api.cx</code>, <code>chat.cx</code>, <code>funcs_demo.cx</code>.</p>
+print(find(scores, big), any(scores, big))
+print(chr(65), ord("A"), index_of("hello", "ll"))</code></pre>
+  </div>
+  <p class="muted reveal">В репозитории: <code>examples/guess.cx</code>, <code>mini_api.cx</code>, <code>todo_api.cx</code>, <code>chat.cx</code>, <code>funcs_demo.cx</code>, <code>raid.cx</code>, <code>shop_game.cx</code>.</p>
 </section>
 
 <section id="stdlib" class="wrap">
-  <h2>~76 функций из коробки</h2>
+  <h2 class="reveal">~76 функций — без pip и npm</h2>
   <div class="grid">
-    <div><b>Массивы</b><br>push pop sort reverse shuffle choice extend unique sum avg range map filter each reduce find any all len</div>
-    <div><b>Строки</b><br>upper lower contains index_of count lines split join replace trim repeat starts_with ends_with</div>
-    <div><b>Мапы</b><br>keys values has merge delete_key</div>
-    <div><b>Файлы</b><br>read_file write_file append_file exists file_size is_dir cwd ls mkdir remove rename</div>
-    <div><b>Сеть</b><br>http_get http_post http_listen</div>
-    <div><b>Система</b><br>input args run sleep clock now date env exit type str num chr ord</div>
+    <div class="card reveal"><b>Массивы</b><p>push pop sort reverse shuffle choice extend unique sum avg range map filter each reduce find any all len</p></div>
+    <div class="card reveal"><b>Строки</b><p>upper lower contains index_of count lines split join replace trim repeat starts_with ends_with str chr ord</p></div>
+    <div class="card reveal"><b>Мапы</b><p>keys values has merge delete_key</p></div>
+    <div class="card reveal"><b>Файлы</b><p>read_file write_file append_file exists file_size is_dir cwd ls mkdir remove rename</p></div>
+    <div class="card reveal"><b>Сеть</b><p>http_get http_post http_listen · JSON: parse_json to_json</p></div>
+    <div class="card reveal"><b>Система</b><p>input args run sleep clock now date env exit type num is_nil is_array is_map is_string is_num assert</p></div>
   </div>
-  <p class="muted">Полная таблица — в <code>README.md</code>. Типы: числа, строки, bool, массивы, мапы, структуры, nil, функции.</p>
 </section>
 
 <section id="docs" class="wrap">
-  <h2>Уроки и редактор</h2>
-  <ul>
-    <li>Туториалы <code>docs/tutorial-01…11</code>: basics → data → strings → files → functions → loops → maps → errors → packages → capstone → <b>backend</b>.</li>
-    <li>VS Code: папка <code>editors/vscode</code> — подсветка, сниппеты, <code>codex fmt</code>, <code>fmt --check</code> для CI.</li>
-    <li>Пакеты с GitHub без реестра: <code>import "user/repo@ver"</code>, кэш <code>~/.codex/pkgs</code>.</li>
-  </ul>
-  <pre class="code"><code>codex.exe help              # справка
-codex.exe fmt --check a.cx  # проверка формата
-codex.exe get user/repo     # скачать пакет</code></pre>
+  <h2 class="reveal">Уроки и редактор</h2>
+  <div class="cards">
+    <div class="card reveal"><h3>📚 11 туториалов</h3><p>basics → data → strings → files → functions → loops → maps → errors → packages → capstone → <b>backend</b>. Каждый сниппет прогнан на реальном интерпретаторе.</p></div>
+    <div class="card reveal"><h3>🧩 VS Code</h3><p>Папка <code>editors/vscode</code>: подсветка, сниппеты <code>fn/forin/server/try</code>, задачи run/fmt/test.</p></div>
+    <div class="card reveal"><h3>📦 Пакеты без реестра</h3><p><code>import "user/repo@ver"</code> — любой публичный репозиторий, кэш <code>~/.codex/pkgs</code>, <code>codex get</code> для предзагрузки.</p></div>
+  </div>
+  <pre class="code reveal"><code>codex.exe help               # справка на русском
+codex.exe fmt --check app.cx # проверка формата для CI
+codex.exe get user/repo      # скачать пакет с GitHub</code></pre>
 </section>
 
 <footer>
-  <div class="wrap muted">CodeX · MIT · Andrey147-ai · v0.22 · <a href="https://github.com/Andrey147-ai/CodeX">GitHub</a></div>
+  <div class="wrap foot">
+    <span>CodeX · MIT · собирается из Go · <span id="year"></span></span>
+    <a href="https://github.com/Andrey147-ai/CodeX">GitHub →</a>
+  </div>
 </footer>
 <script src="app.js"></script>
 </body>
