@@ -285,7 +285,7 @@ API demo: `todo_api.cx` (in-memory TODO over HTTP, port 8082).
 
 Dev support lives in `editors/vscode/`: `.cx` highlight, snippets
 (`print/fn/forin/if/struct/server/try`), `//` comments + auto-close.
-Install: copy `editors/vscode` to `%USERPROFILE%\.vscode\extensions\codex-language-0.22.0`
+Install: copy `editors/vscode` to `%USERPROFILE%\.vscode\extensions\codex-language-0.23.0`
 and reload.
 
 ## Building from source

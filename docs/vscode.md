@@ -2,7 +2,7 @@
 
 ## 1. Install extension (dev, 1 min)
 
-Copy `editors/vscode` to `%USERPROFILE%\.vscode\extensions\codex-language-0.22.0`, reload VS Code.
+Copy `editors/vscode` to `%USERPROFILE%\.vscode\extensions\codex-language-0.23.0`, reload VS Code.
 
 You get: `.cx` highlight, snippets (`print`, `fn`, `forin`, `if`, `struct`, `server`, `try`), `//` comments, auto-close.
 
@@ -28,7 +28,7 @@ Suggested `tasks.json`:
 }
 ```
 
-## 3. New builtins (v0.22 wave 2+3)
+## 3. New builtins (v0.23 wave 2+3)
 
 `pop`, `reverse`, `shuffle`, `choice`, `extend`, `unique`, `sum`, `avg`,
 `file_size`, `is_dir`, `cwd`, `clock`, `http_post`,

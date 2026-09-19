@@ -5,7 +5,7 @@ Lightweight support for `.cx` files.
 ## Install (dev)
 
 1. Copy folder `editors/vscode` to:
-   `%USERPROFILE%\.vscode\extensions\codex-language-0.22.0`
+   `%USERPROFILE%\.vscode\extensions\codex-language-0.23.0`
 2. Reload VS Code, open any `.cx` file.
 
 ## Features

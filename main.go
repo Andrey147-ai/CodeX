@@ -22,7 +22,7 @@ import (
 )
 
 // codexVersion is printed by `codex version`. Bump on release.
-const codexVersion = "v0.22.0"
+const codexVersion = "v0.23.0"
 
 // ========== LEXER ==========
 
