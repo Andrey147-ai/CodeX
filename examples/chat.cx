@@ -1,0 +1,16 @@
+// Chat pipeline: producer + consumer via channel + background tasks.
+// Run: ..\codex.exe chat.cx
+ch := channel(5)
+fn bot(name, ch) {
+    for m in ["hi", "how are you?", "bye"] {
+        send(ch, name + ": " + m)
+    }
+}
+t1 := spawn(bot, "ann", ch)
+t2 := spawn(bot, "bob", ch)
+for i in range(6) {
+    print("got ", recv(ch))
+}
+wait(t1)
+wait(t2)
+print("chat done")

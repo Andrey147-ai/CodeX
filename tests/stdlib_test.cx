@@ -1,0 +1,21 @@
+// Stdlib wave 2: pop, reverse, file_size, http_post (fail-path).
+a := [1, 2, 3]
+assert(pop(a) == 3, "pop value")
+assert(a == [1, 2], "pop shrinks")
+assert(len(a) == 2, "pop len")
+b := [1, 2, 3]
+reverse(b)
+assert(b == [3, 2, 1], "reverse")
+reverse(b)
+assert(b == [1, 2, 3], "reverse twice")
+write_file("tmp_size.txt", "hello")
+assert(file_size("tmp_size.txt") == 5, "file_size")
+assert(exists("tmp_size.txt"), "exists tmp")
+// http_post to a closed port must fail into catch, not kill the test
+caught := false
+try {
+    http_post("http://127.0.0.1:9/nope", "x")
+} catch e {
+    caught = true
+}
+assert(caught, "http_post fail is catchable")

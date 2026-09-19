@@ -89,6 +89,9 @@ code and exercises:
   ([read it](docs/tutorial-09-packages.md))
 * **Part 10: capstone** — dissecting the log analyzer
   ([read it](docs/tutorial-10-capstone.md))
+* **Part 11: backend** — JSON API in 10 lines
+  ([read it](docs/tutorial-11-backend.md))
+* **VS Code setup** — highlight, snippets, tasks ([read it](docs/vscode.md))
 
 Each snippet in the tutorials is executed against the real interpreter
 before publishing, so what you read is what runs.
@@ -175,6 +178,8 @@ import "Andrey147-ai/strutils@v1.2.0"
 | `print(...)` | Print values | `print("hp=", hp)` |
 | `len(x)` | Array / map / string length | `len([1,2])` → `2` |
 | `push(arr, v)` | Append to array | `push(inv, "sword")` |
+| `pop(arr)` | Remove + return last | `pop(a)` |
+| `reverse(arr)` | Reverse in place | `reverse(a)` |
 | `sort(arr)` | Sort numbers/strings in place | `sort(scores)` |
 | `keys(m)` | Sorted map keys | `keys({"a":1})` → `[a]` |
 | `has(m, k)` | Map key check | `has(cfg, "debug")` |
@@ -187,6 +192,7 @@ import "Andrey147-ai/strutils@v1.2.0"
 | `split(s, sep)` | Split to array | `split("a,b", ",")` |
 | `join(arr, sep)` | Join array to string | `join(["a"], "-")` |
 | `read_file(p)` | Read whole file | `read_file("app.log")` |
+| `file_size(p)` | File size in bytes | `file_size("a.txt")` |
 | `write_file(p, t)` | Overwrite file, returns bytes | `write_file("o.txt", t)` |
 | `append_file(p, t)` | Append to file | `append_file("o.txt", t)` |
 | `exists(p)` | Path check | `exists("o.txt")` |
@@ -253,6 +259,8 @@ Everyday tools: `organize.cx` (sort files by extension), `todo.cx`
 First-evening viral trio: `guess.cx` (guess-the-number game),
 `mini_api.cx` (JSON backend in 10 lines, port 8081), `diary.cx`
 (date + file diary).
+Concurrency: `parallel.cx` (spawn/wait), `chat.cx` (channels).
+API demo: `todo_api.cx` (in-memory TODO over HTTP, port 8082).
 
 ## 🧩 VS Code
 

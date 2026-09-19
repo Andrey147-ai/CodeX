@@ -2336,6 +2336,75 @@ func (interp *Interpreter) evalFuncCall(call *FuncCall, env *Environment) (resul
 		return arr
 	}
 
+	if call.Name == "pop" {
+		if len(call.Args) != 1 {
+			fail("Runtime error: pop() takes exactly 1 argument\n")
+		}
+		target, ok := call.Args[0].(*Identifier)
+		if !ok {
+			fail("Runtime error: pop() target must be a variable\n")
+		}
+		arr, ok := env.getVar(target.Name)
+		if !ok || arr.Kind != "array" {
+			fail("Runtime error: pop() target '%s' is not an array\n", target.Name)
+		}
+		if len(arr.Items) == 0 {
+			fail("Runtime error: pop() of empty array\n")
+		}
+		last := arr.Items[len(arr.Items)-1]
+		arr.Items = arr.Items[:len(arr.Items)-1]
+		current := env
+		for current != nil {
+			if _, found := current.vars[target.Name]; found {
+				current.vars[target.Name] = arr
+				break
+			}
+			current = current.parent
+		}
+		return last
+	}
+
+	if call.Name == "reverse" {
+		if len(call.Args) != 1 {
+			fail("Runtime error: reverse() takes exactly 1 argument\n")
+		}
+		target, ok := call.Args[0].(*Identifier)
+		if !ok {
+			fail("Runtime error: reverse() target must be a variable\n")
+		}
+		arr, ok := env.getVar(target.Name)
+		if !ok || arr.Kind != "array" {
+			fail("Runtime error: reverse() target '%s' is not an array\n", target.Name)
+		}
+		for i, j := 0, len(arr.Items)-1; i < j; i, j = i+1, j-1 {
+			arr.Items[i], arr.Items[j] = arr.Items[j], arr.Items[i]
+		}
+		current := env
+		for current != nil {
+			if _, found := current.vars[target.Name]; found {
+				current.vars[target.Name] = arr
+				break
+			}
+			current = current.parent
+		}
+		return arr
+	}
+
+	if call.Name == "file_size" {
+		if len(call.Args) != 1 {
+			fail("Runtime error: file_size() takes exactly 1 argument\n")
+		}
+		path := interp.eval(call.Args[0], env)
+		if path.Kind != "string" {
+			fail("Runtime error: file_size() needs a string path, got %s\n", path.Kind)
+		}
+		info, err := os.Stat(path.StrVal)
+		if err != nil {
+			fail("Runtime error: file_size() failed: %v\n", err)
+		}
+		return Value{Kind: "number", NumVal: float64(info.Size())}
+	}
+
 	if call.Name == "args" {
 		if len(call.Args) != 0 {
 			fail("Runtime error: args() takes no arguments\n")
@@ -4145,6 +4214,13 @@ func formatSource(src string) string {
 		if atStart || noSpaceAfter {
 			return false
 		}
+		// Составное присваивание += -= *= /= %= div= : клей без пробела
+		if cur == TOK_EQ {
+			switch prev {
+			case TOK_PLUS, TOK_MINUS, TOK_STAR, TOK_SLASH, TOK_PERCENT, TOK_DIVINT:
+				return false
+			}
+		}
 		switch cur {
 		case TOK_RPAREN, TOK_RBRACK, TOK_DOT, TOK_COMMA, TOK_COLON:
 			return false
@@ -4198,7 +4274,10 @@ func formatSource(src string) string {
 			atStart = false
 		case TOK_LBRACE:
 			if !atStart {
-				sb.WriteString(" ")
+				// map-литерал как аргумент: to_json({...}, без пробела после (,[,
+				if prev != TOK_LPAREN && prev != TOK_LBRACK && prev != TOK_COMMA {
+					sb.WriteString(" ")
+				}
 			} else {
 				ind()
 			}
@@ -4369,6 +4448,7 @@ func printHelp() {
 	fmt.Println("  codex.exe help             эта справка")
 	fmt.Println("  codex.exe version          версия")
 	fmt.Println("  codex.exe fmt <file.cx>    форматировать код")
+	fmt.Println("  codex.exe fmt --check <file.cx>  проверить формат (для CI)")
 	fmt.Println("  codex.exe test [dir]       тесты *_test.cx с assert()")
 	fmt.Println("  codex.exe get <user/repo[@ver]>  скачать пакет с GitHub")
 	fmt.Println("  codex.exe new [file.cx]    создать шаблон новичка (по умолч. main.cx)")
@@ -4443,15 +4523,35 @@ func main() {
 
 	if os.Args[1] == "fmt" {
 		if len(os.Args) < 3 {
-			fmt.Fprintf(os.Stderr, "Usage: codex fmt <file.cx>\n")
+			fmt.Fprintf(os.Stderr, "Usage: codex fmt [--check] <file.cx>\n")
 			os.Exit(1)
 		}
-		data, err := os.ReadFile(os.Args[2])
+		check := false
+		fileArg := os.Args[2]
+		if os.Args[2] == "--check" {
+			if len(os.Args) < 4 {
+				fmt.Fprintf(os.Stderr, "Usage: codex fmt --check <file.cx>\n")
+				os.Exit(1)
+			}
+			check = true
+			fileArg = os.Args[3]
+		}
+		data, err := os.ReadFile(fileArg)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Ошибка чтения %s: %v\n", os.Args[2], err)
+			fmt.Fprintf(os.Stderr, "Ошибка чтения %s: %v\n", fileArg, err)
 			os.Exit(1)
 		}
-		fmt.Print(formatSource(string(data)))
+		formatted := formatSource(string(data))
+		if check {
+			normalized := strings.ReplaceAll(string(data), "\r\n", "\n")
+			if formatted != normalized {
+				fmt.Fprintf(os.Stderr, "fmt --check: %s needs formatting\n", fileArg)
+				os.Exit(1)
+			}
+			fmt.Printf("ok %s\n", fileArg)
+			return
+		}
+		fmt.Print(formatted)
 		return
 	}
 

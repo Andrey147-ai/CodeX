@@ -1,0 +1,15 @@
+// TODO API: in-memory list over HTTP. No frameworks.
+// Run: ..\codex.exe todo_api.cx → GET http://127.0.0.1:8082/todos
+todos := []
+fn api(req) {
+    if req["path"] == "/todos" {
+        return to_json({"todos": todos})
+    }
+    if req["path"] == "/add" {
+        push(todos, req["query"]["t"])
+        return to_json({"ok": true, "todos": todos})
+    }
+    return {"status": 404, "body": "try /todos or /add?t=buy milk"}
+}
+print("TODO API on 127.0.0.1:8082/todos")
+http_listen(8082, api)

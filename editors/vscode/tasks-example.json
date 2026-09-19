@@ -1,0 +1,21 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "codex: run current file",
+      "type": "shell",
+      "command": "${workspaceFolder}/codex.exe ${file}",
+      "group": {"kind": "build", "isDefault": true}
+    },
+    {
+      "label": "codex: fmt current file",
+      "type": "shell",
+      "command": "${workspaceFolder}/codex.exe fmt ${file}"
+    },
+    {
+      "label": "codex: test all",
+      "type": "shell",
+      "command": "${workspaceFolder}/codex.exe test tests"
+    }
+  ]
+}
