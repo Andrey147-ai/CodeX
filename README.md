@@ -5,6 +5,10 @@
 [![Pages](https://github.com/Andrey147-ai/CodeX/actions/workflows/pages.yml/badge.svg)](https://andrey147-ai.github.io/CodeX/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
+<p align="center">
+  <img src="site/demo.svg" alt="CodeX live demo" width="720">
+</p>
+
 A small programming language written from scratch in Go. One file of
 interpreter, zero dependencies — install in one command or grab
 `codex.exe` from [Releases](../../releases) and run `.cx` scripts anywhere.
