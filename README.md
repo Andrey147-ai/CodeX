@@ -40,6 +40,14 @@ it takes about 15 minutes.
 
 ## 💻 Interactive mode and formatting
 
+New here? Fastest start:
+
+```
+codex.exe new hello.cx
+codex.exe hello.cx
+codex.exe help
+```
+
 Run `codex.exe` with no arguments for a REPL: definitions persist,
 expressions echo their values, runtime errors don't kill the session:
 
@@ -183,6 +191,7 @@ import "Andrey147-ai/strutils@v1.2.0"
 | `append_file(p, t)` | Append to file | `append_file("o.txt", t)` |
 | `exists(p)` | Path check | `exists("o.txt")` |
 | `http_get(url)` | Fetch URL body | `http_get("https://example.com")` |
+| `http_post(url, body)` | POST text body, returns response | `http_post(url, "hi")` |
 | `http_listen(port, fn)` | Serve HTTP, handler gets map | `http_listen(8080, hello)` |
 | `sleep(ms)` | Millisecond pause | `sleep(50)` |
 | `pkgdir(spec)` | Local path of a GitHub repo | `pkgdir("user/data")` |
@@ -241,6 +250,16 @@ In `examples/`: `raid.cx` and `shop_game.cx` (games), `inventory.cx`,
 `server.cx` (web server, try `..\codex.exe server.cx`).
 Everyday tools: `organize.cx` (sort files by extension), `todo.cx`
 (add/list/done), `backup.cx` (flat copy), `passgen.cx` (passwords).
+First-evening viral trio: `guess.cx` (guess-the-number game),
+`mini_api.cx` (JSON backend in 10 lines, port 8081), `diary.cx`
+(date + file diary).
+
+## 🧩 VS Code
+
+Dev support lives in `editors/vscode/`: `.cx` highlight, snippets
+(`print/fn/forin/if/struct/server/try`), `//` comments + auto-close.
+Install: copy `editors/vscode` to `%USERPROFILE%\.vscode\extensions\codex-language-0.22.0`
+and reload.
 
 ## Building from source
 

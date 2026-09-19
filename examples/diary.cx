@@ -1,0 +1,7 @@
+// Дневник за 15 строк: дата + файл + чтение.
+// Запуск: ..\codex.exe diary.cx
+line := input("Что сегодня было? ")
+append_file("diary.txt", date() + " | " + line + "\n")
+print("Записал!")
+print("--- Твой дневник ---")
+print(read_file("diary.txt"))

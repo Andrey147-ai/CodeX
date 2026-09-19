@@ -2439,6 +2439,31 @@ func (interp *Interpreter) evalFuncCall(call *FuncCall, env *Environment) (resul
 		return Value{Kind: "string", StrVal: string(body)}
 	}
 
+	if call.Name == "http_post" {
+		if len(call.Args) != 2 {
+			fail("Runtime error: http_post() takes exactly 2 arguments (url, body)\n")
+		}
+		url := interp.eval(call.Args[0], env)
+		payload := interp.eval(call.Args[1], env)
+		if url.Kind != "string" || payload.Kind != "string" {
+			fail("Runtime error: http_post() needs (string, string)\n")
+		}
+		client := &http.Client{Timeout: 15 * time.Second}
+		resp, err := client.Post(url.StrVal, "text/plain; charset=utf-8", strings.NewReader(payload.StrVal))
+		if err != nil {
+			fail("Runtime error: http_post() failed: %v\n", err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+			fail("Runtime error: http_post() status %s\n", resp.Status)
+		}
+		body, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
+		if err != nil {
+			fail("Runtime error: http_post() read failed: %v\n", err)
+		}
+		return Value{Kind: "string", StrVal: string(body)}
+	}
+
 	if call.Name == "read_file" {
 		if len(call.Args) != 1 {
 			fail("Runtime error: read_file() takes exactly 1 argument\n")
@@ -4333,6 +4358,61 @@ func runTestFile(path string) bool {
 	return ok
 }
 
+// ========== HELP + NEW (DX для новичков) ==========
+
+func printHelp() {
+	fmt.Println("CodeX " + codexVersion + " — лёгкий язык программирования")
+	fmt.Println("")
+	fmt.Println("Использование:")
+	fmt.Println("  codex.exe <file.cx>        запустить скрипт")
+	fmt.Println("  codex.exe                  REPL (интерактивный режим)")
+	fmt.Println("  codex.exe help             эта справка")
+	fmt.Println("  codex.exe version          версия")
+	fmt.Println("  codex.exe fmt <file.cx>    форматировать код")
+	fmt.Println("  codex.exe test [dir]       тесты *_test.cx с assert()")
+	fmt.Println("  codex.exe get <user/repo[@ver]>  скачать пакет с GitHub")
+	fmt.Println("  codex.exe new [file.cx]    создать шаблон новичка (по умолч. main.cx)")
+	fmt.Println("")
+	fmt.Println("Примеры:")
+	fmt.Println("  codex.exe new hello.cx")
+	fmt.Println("  codex.exe hello.cx")
+	fmt.Println("  codex.exe test tests")
+	fmt.Println("")
+	fmt.Println("Уроки: docs/tutorial-01-basics.md ... docs/tutorial-10-capstone.md")
+}
+
+func codexNew(target string) error {
+	if !strings.HasSuffix(strings.ToLower(target), ".cx") {
+		target += ".cx"
+	}
+	if _, err := os.Stat(target); err == nil {
+		return fmt.Errorf("файл %s уже существует", target)
+	}
+	template := `// Привет! Это CodeX — запусти: codex.exe ` + filepath.Base(target) + `
+name := input("Как тебя зовут? ")
+print("Привет, " + name + "!")
+
+// Массив + цикл
+scores := [90, 80, 100]
+total := 0
+for s in scores {
+    total += s
+}
+print("Средний балл: ", total / len(scores))
+
+// Функция
+fn double(n) {
+    return n * 2
+}
+print("double(21) = ", double(21))
+`
+	if err := os.WriteFile(target, []byte(template), 0644); err != nil {
+		return err
+	}
+	fmt.Printf("ok %s — запусти: codex.exe %s\n", target, target)
+	return nil
+}
+
 func main() {
 	if len(os.Args) < 2 {
 		repl()
@@ -4341,6 +4421,23 @@ func main() {
 
 	if os.Args[1] == "version" || os.Args[1] == "--version" {
 		fmt.Println("CodeX " + codexVersion)
+		return
+	}
+
+	if os.Args[1] == "help" || os.Args[1] == "--help" || os.Args[1] == "-h" {
+		printHelp()
+		return
+	}
+
+	if os.Args[1] == "new" || os.Args[1] == "init" {
+		target := "main.cx"
+		if len(os.Args) > 2 {
+			target = os.Args[2]
+		}
+		if err := codexNew(target); err != nil {
+			fmt.Fprintf(os.Stderr, "new: %v\n", err)
+			os.Exit(1)
+		}
 		return
 	}
 

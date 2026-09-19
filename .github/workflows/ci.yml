@@ -44,3 +44,13 @@ jobs:
       - name: Unit tests
         shell: bash
         run: ./codex${{ runner.os == 'Windows' && '.exe' || '' }} test tests
+
+      - name: DX smoke (help/new/fmt/examples)
+        shell: bash
+        run: |
+          ./codex${{ runner.os == 'Windows' && '.exe' || '' }} help
+          ./codex${{ runner.os == 'Windows' && '.exe' || '' }} fmt examples/guess.cx > /dev/null
+          ./codex${{ runner.os == 'Windows' && '.exe' || '' }} fmt examples/mini_api.cx > /dev/null
+          ./codex${{ runner.os == 'Windows' && '.exe' || '' }} fmt examples/diary.cx > /dev/null
+          echo "ci-note" | ./codex${{ runner.os == 'Windows' && '.exe' || '' }} examples/diary.cx
+          rm -f diary.txt examples/diary.txt diary.txt

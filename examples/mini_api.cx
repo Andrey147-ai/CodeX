@@ -1,0 +1,10 @@
+// Мини-бэкенд за 10 строк: JSON API без фреймворков.
+// Запуск: ..\codex.exe mini_api.cx  →  http://127.0.0.1:8081/hi
+fn hello(req) {
+    if req["path"] == "/hi" {
+        return to_json({"hi": "there", "time": date()})
+    }
+    return {"status": 404, "body": "try /hi"}
+}
+print("API on 127.0.0.1:8081/hi")
+http_listen(8081, hello)

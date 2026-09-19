@@ -1,0 +1,44 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            out: codex-linux
+          - os: windows-latest
+            out: codex.exe
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: stable
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Build
+        run: go build -ldflags="-s -w" -o ${{ matrix.out }} .
+
+      - name: Test
+        shell: bash
+        run: |
+          ./${{ matrix.out }} test tests
+
+      - name: Publish
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ matrix.out }}
+          generate_release_notes: true

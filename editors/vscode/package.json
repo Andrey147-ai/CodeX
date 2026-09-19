@@ -1,0 +1,35 @@
+{
+  "name": "codex-language",
+  "displayName": "CodeX Language",
+  "description": "Lightweight CodeX (.cx) language: syntax, snippets, fmt on save",
+  "version": "0.22.0",
+  "publisher": "Andrey147-ai",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": ["Programming Languages"],
+  "contributes": {
+    "languages": [
+      {
+        "id": "codex",
+        "aliases": ["CodeX", "codex"],
+        "extensions": [".cx"],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "codex",
+        "scopeName": "source.codex",
+        "path": "./syntaxes/codex.tmLanguage.json"
+      }
+    ],
+    "snippets": [
+      {
+        "language": "codex",
+        "path": "./snippets/codex.json"
+      }
+    ]
+  }
+}

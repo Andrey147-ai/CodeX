@@ -1,0 +1,79 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "CodeX",
+  "scopeName": "source.codex",
+  "fileTypes": ["cx"],
+  "patterns": [
+    {"include": "#comments"},
+    {"include": "#strings"},
+    {"include": "#keywords"},
+    {"include": "#numbers"},
+    {"include": "#functions"},
+    {"include": "#structs"}
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.double-slash.codex",
+          "match": "//.*$"
+        }
+      ]
+    },
+    "strings": {
+      "patterns": [
+        {
+          "name": "string.quoted.double.codex",
+          "begin": "\"",
+          "end": "\"",
+          "patterns": [
+            {
+              "name": "constant.character.escape.codex",
+              "match": "\\\\(n|t|r|e|\\\\|\")"
+            }
+          ]
+        }
+      ]
+    },
+    "keywords": {
+      "patterns": [
+        {
+          "name": "keyword.control.codex",
+          "match": "\\b(if|else|for|while|in|break|continue|return|switch|case|try|catch|import|del|div)\\b"
+        },
+        {
+          "name": "storage.type.codex",
+          "match": "\\b(fn|struct|nil|true|false)\\b"
+        },
+        {
+          "name": "support.function.codex",
+          "match": "\\b(print|len|push|sort|keys|has|str|num|input|args|upper|lower|contains|split|join|read_file|write_file|append_file|exists|http_get|http_post|http_listen|sleep|type|env|exit|now|parse_json|to_json|rand|randint|seed|abs|sqrt|pow|min|max|floor|ceil|round|range|map|filter|each|run|assert|channel|send|recv|spawn|wait|ls|mkdir|remove|rename|replace|trim|repeat|starts_with|ends_with|date|pkgdir)\\b"
+        }
+      ]
+    },
+    "numbers": {
+      "patterns": [
+        {
+          "name": "constant.numeric.codex",
+          "match": "\\b\\d+(\\.\\d+)?\\b"
+        }
+      ]
+    },
+    "functions": {
+      "patterns": [
+        {
+          "name": "entity.name.function.codex",
+          "match": "\\b(fn)\\s+([A-Za-z_][A-Za-z0-9_]*)"
+        }
+      ]
+    },
+    "structs": {
+      "patterns": [
+        {
+          "name": "entity.name.type.codex",
+          "match": "\\b(struct)\\s+([A-Za-z_][A-Za-z0-9_]*)"
+        }
+      ]
+    }
+  }
+}
