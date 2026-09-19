@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://andrey147-ai.github.io/CodeX/sitemap.xml
