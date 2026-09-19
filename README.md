@@ -36,7 +36,9 @@ Boss survives with HP: 800
 ```
 
 New here? Start with [Tutorial Part 1: basics](docs/tutorial-01-basics.md) —
-it takes about 15 minutes.
+it takes about 15 minutes. Website: [`site/`](site/index.html)
+(GitHub Pages deploys it automatically, local preview:
+`codex.exe site/serve.cx` → http://127.0.0.1:8090/).
 
 ## 💻 Interactive mode and formatting
 

@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CodeX — лёгкий язык программирования</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="nav">
+  <div class="wrap nav-in">
+    <span class="logo">CodeX <small>v0.22</small></span>
+    <nav>
+      <a href="#start">Старт</a>
+      <a href="#examples">Примеры</a>
+      <a href="#stdlib">Функции</a>
+      <a href="#docs">Уроки</a>
+      <a href="https://github.com/Andrey147-ai/CodeX">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<section class="hero">
+  <div class="wrap">
+    <h1>Язык, который запускается за 15 минут</h1>
+    <p>Один <code>codex.exe</code>, ноль зависимостей. Переменные, игры, файлы, JSON, HTTP-сервер — без фреймворков.</p>
+    <div class="btns">
+      <a class="btn primary" href="https://github.com/Andrey147-ai/CodeX/releases">Скачать codex.exe</a>
+      <a class="btn" href="#start">Быстрый старт</a>
+    </div>
+    <pre class="code"><code>codex.exe new hello.cx
+codex.exe hello.cx</code></pre>
+  </div>
+</section>
+
+<section id="start" class="wrap">
+  <h2>Старт за 3 команды</h2>
+  <pre class="code"><code>codex.exe new hello.cx   # шаблон новичка
+codex.exe hello.cx       # запуск
+codex.exe test tests     # тесты с assert()</code></pre>
+  <pre class="code"><code>// hello.cx
+name := input("Как тебя зовут? ")
+print("Привет, " + name + "!")
+scores := [90, 80, 100]
+total := sum(scores)
+print("Средний балл: ", total / len(scores))</code></pre>
+</section>
+
+<section id="examples" class="wrap">
+  <h2>Примеры</h2>
+  <div class="tabs">
+    <button data-tab="guess" class="active">Игра</button>
+    <button data-tab="api">Бэкенд</button>
+    <button data-tab="funcs">Функции</button>
+  </div>
+  <pre class="code" id="tab-guess"><code>secret := randint(1, 100)
+tries := 0
+while true {
+    guess := num(input("Твой вариант: "))
+    tries += 1
+    if guess == secret { print("Точно за ", tries); break }
+    else if guess < secret { print("Бери больше") }
+    else { print("Бери меньше") }
+}</code></pre>
+  <pre class="code hidden" id="tab-api"><code>fn hello(req) {
+    if req["path"] == "/hi" {
+        return to_json({"hi": "there", "time": date()})
+    }
+    return {"status": 404, "body": "try /hi"}
+}
+http_listen(8081, hello)</code></pre>
+  <pre class="code hidden" id="tab-funcs"><code>scores := [5, 3, 5, 2, 3]
+print(sum(scores), avg(scores), unique(scores))
+print(reduce(scores, add, 0))
+print(find(scores, big), any(scores, big), all(scores, big))
+print(chr(65), ord("A"), cwd(), clock())</code></pre>
+  <p class="muted">Все файлы лежат в <code>examples/</code>: <code>guess.cx</code>, <code>mini_api.cx</code>, <code>todo_api.cx</code>, <code>chat.cx</code>, <code>funcs_demo.cx</code>.</p>
+</section>
+
+<section id="stdlib" class="wrap">
+  <h2>~76 функций из коробки</h2>
+  <div class="grid">
+    <div><b>Массивы</b><br>push pop sort reverse shuffle choice extend unique sum avg range map filter each reduce find any all len</div>
+    <div><b>Строки</b><br>upper lower contains index_of count lines split join replace trim repeat starts_with ends_with</div>
+    <div><b>Мапы</b><br>keys values has merge delete_key</div>
+    <div><b>Файлы</b><br>read_file write_file append_file exists file_size is_dir cwd ls mkdir remove rename</div>
+    <div><b>Сеть</b><br>http_get http_post http_listen</div>
+    <div><b>Система</b><br>input args run sleep clock now date env exit type str num chr ord</div>
+  </div>
+  <p class="muted">Полная таблица — в <code>README.md</code>. Типы: числа, строки, bool, массивы, мапы, структуры, nil, функции.</p>
+</section>
+
+<section id="docs" class="wrap">
+  <h2>Уроки и редактор</h2>
+  <ul>
+    <li>Туториалы <code>docs/tutorial-01…11</code>: basics → data → strings → files → functions → loops → maps → errors → packages → capstone → <b>backend</b>.</li>
+    <li>VS Code: папка <code>editors/vscode</code> — подсветка, сниппеты, <code>codex fmt</code>, <code>fmt --check</code> для CI.</li>
+    <li>Пакеты с GitHub без реестра: <code>import "user/repo@ver"</code>, кэш <code>~/.codex/pkgs</code>.</li>
+  </ul>
+  <pre class="code"><code>codex.exe help              # справка
+codex.exe fmt --check a.cx  # проверка формата
+codex.exe get user/repo     # скачать пакет</code></pre>
+</section>
+
+<footer>
+  <div class="wrap muted">CodeX · MIT · Andrey147-ai · v0.22 · <a href="https://github.com/Andrey147-ai/CodeX">GitHub</a></div>
+</footer>
+<script src="app.js"></script>
+</body>
+</html>
