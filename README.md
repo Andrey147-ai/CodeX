@@ -182,16 +182,26 @@ import "Andrey147-ai/strutils@v1.2.0"
 | `reverse(arr)` | Reverse in place | `reverse(a)` |
 | `sort(arr)` | Sort numbers/strings in place | `sort(scores)` |
 | `keys(m)` | Sorted map keys | `keys({"a":1})` → `[a]` |
+| `values(m)` | Map values (key-sorted) | `values({"b":2,"a":1})` → `[1,2]` |
+| `merge(a, b)` | New merged map, b wins | `merge({"a":1},{"b":2})` |
+| `delete_key(m, k)` | Remove key, returns existed | `delete_key(m, "a")` |
 | `has(m, k)` | Map key check | `has(cfg, "debug")` |
 | `str(x)` | Any value to string | `str(42)` → `"42"` |
+| `chr(n)/ord(s)` | Codepoint convert | `chr(65)` → `"A"` |
+| `is_nil/is_array/is_map/is_string/is_num` | Type checks | `is_array([1])` |
 | `num(x)` | String/bool/number to number | `num("19")+3` → `22` |
 | `input(p)` | Read a line from stdin | `name := input("name? ")` |
 | `args()` | CLI args after the script | `args()[0]` |
 | `upper/lower(s)` | String case | `upper("hi")` → `"HI"` |
 | `contains(s, sub)` | Substring check | `contains(s, "err")` |
 | `split(s, sep)` | Split to array | `split("a,b", ",")` |
+| `lines(s)` | Split by newlines | `lines("a\nb")` |
+| `index_of(s, sub)` | Rune index or -1 | `index_of("hi","i")` → `1` |
+| `count(s, sub)` | Count occurrences | `count("aaa","a")` → `3` |
 | `join(arr, sep)` | Join array to string | `join(["a"], "-")` |
 | `read_file(p)` | Read whole file | `read_file("app.log")` |
+| `cwd()` | Current directory | `cwd()` |
+| `is_dir(p)` | Directory check | `is_dir(".")` |
 | `file_size(p)` | File size in bytes | `file_size("a.txt")` |
 | `write_file(p, t)` | Overwrite file, returns bytes | `write_file("o.txt", t)` |
 | `append_file(p, t)` | Append to file | `append_file("o.txt", t)` |
@@ -205,6 +215,7 @@ import "Andrey147-ai/strutils@v1.2.0"
 | `env(name)` | Env var or `nil` | `env("PATH")` |
 | `exit(code)` | Exit with code | `exit(3)` |
 | `now()` | Unix timestamp | `now()` |
+| `clock()` | Unix millis | `clock()` |
 | `parse_json(s)` | JSON string to value | `parse_json("{\"a\":1}")` |
 | `to_json(x)` | Value to JSON string | `to_json([1,"a"])` |
 | `try/catch` | Catch runtime errors | `try { risky() } catch e { print(e) }` |
@@ -212,7 +223,13 @@ import "Andrey147-ai/strutils@v1.2.0"
 | `abs/sqrt/pow/min/max/floor/ceil/round` | Math | `sqrt(16)` → `4` |
 | `s[i]` | String char (negatives ok) | `"hi"[-1]` → `"i"` |
 | `range(a, b)` | Number array | `range(3)` → `[0,1,2]` |
+| `sum/avg(arr)` | Number stats | `sum([1,2])` → `3` |
+| `unique(arr)` | Dedup, order kept | `unique([1,1,2])` → `[1,2]` |
+| `extend(a, b)` | Append all of b to a | `extend(a, [2])` |
+| `choice(arr)` | Random element | `choice([1,2])` |
+| `shuffle(arr)` | Shuffle in place | `shuffle(deck)` |
 | `map/filter/each` | Higher-order over arrays | `map(a, fn(x){return x*2})` |
+| `reduce/find/any/all` | Fold, search, quantifiers | `reduce(a, add, 0)` |
 | `run(prog, args)` | Run a program | `run("go", ["version"])` |
 | `assert(cond)` | Test assertion | `assert(a == b, "math")` |
 | `channel(n)` / `send` / `recv` | Message passing | `send(ch, 42)` |

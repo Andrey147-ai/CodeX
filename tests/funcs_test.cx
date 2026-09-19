@@ -1,0 +1,68 @@
+// Wave 3: 26 new funcs — strings, arrays, maps, types, system, higher-order.
+assert(index_of("hello", "ll") == 2, "index_of basic")
+assert(index_of("hello", "z") == -1, "index_of missing")
+assert(index_of("abc", "") == 0, "index_of empty")
+assert(count("aaa", "a") == 3, "count")
+assert(count("hello", "z") == 0, "count zero")
+assert(lines("a\nb\nc") == ["a", "b", "c"], "lines")
+assert(sum([1, 2, 3]) == 6, "sum")
+assert(sum([]) == 0, "sum empty")
+assert(avg([2, 4]) == 3, "avg")
+
+u := [1, 2, 2, 3, 1]
+assert(unique(u) == [1, 2, 3], "unique")
+
+e := [1]
+extend(e, [2, 3])
+assert(e == [1, 2, 3], "extend")
+
+assert(choice([7]) == 7, "choice single")
+
+s1 := [1, 2, 3, 4, 5]
+shuffle(s1)
+assert(len(s1) == 5, "shuffle len")
+assert(sum(s1) == 15, "shuffle sum kept")
+
+assert(values({"b": 2, "a": 1}) == [1, 2], "values sorted")
+mg := merge({"a": 1}, {"b": 2})
+assert(mg["a"] == 1 && mg["b"] == 2, "merge")
+assert(merge({"a": 1}, {"a": 2})["a"] == 2, "merge wins")
+
+dm := {"a": 1, "b": 2}
+assert(delete_key(dm, "a") == true, "delete_key true")
+assert(has(dm, "a") == false, "deleted")
+assert(delete_key(dm, "a") == false, "delete_key false")
+
+assert(is_nil(nil), "is_nil")
+assert(is_array([1]), "is_array")
+assert(is_map({"a": 1}), "is_map")
+assert(is_string("x"), "is_string")
+assert(is_num(42), "is_num")
+assert(!is_num("42"), "is_num false")
+
+assert(chr(65) == "A", "chr")
+assert(ord("A") == 65, "ord")
+assert(ord("ABC") == 65, "ord first")
+
+assert(is_string(cwd()) && len(cwd()) > 0, "cwd")
+assert(is_dir("."), "is_dir dot")
+assert(!is_dir("nope_xyz_123"), "is_dir missing")
+assert(is_num(clock()) && clock() >= 0, "clock")
+
+fn add2(a, b) {
+    return a + b
+}
+assert(reduce([1, 2, 3], add2, 0) == 6, "reduce")
+assert(reduce([], add2, 9) == 9, "reduce empty")
+
+fn gt1(x) {
+    return x > 1
+}
+assert(find([1, 2, 3], gt1) == 2, "find")
+assert(is_nil(find([1], gt1)), "find nil")
+assert(any([1, 2, 3], gt1), "any true")
+assert(!any([1], gt1), "any false")
+assert(!any([], gt1), "any empty")
+assert(all([2, 3], gt1), "all true")
+assert(!all([1, 2], gt1), "all false")
+assert(all([], gt1), "all empty")

@@ -2260,6 +2260,200 @@ func (interp *Interpreter) evalFuncCall(call *FuncCall, env *Environment) (resul
 		return Value{Kind: "string", StrVal: strings.Join(parts, sep.StrVal)}
 	}
 
+	if call.Name == "index_of" {
+		if len(call.Args) != 2 {
+			fail("Runtime error: index_of() takes exactly 2 arguments (s, sub)\n")
+		}
+		s := interp.eval(call.Args[0], env)
+		sub := interp.eval(call.Args[1], env)
+		if s.Kind != "string" || sub.Kind != "string" {
+			fail("Runtime error: index_of() needs (string, string)\n")
+		}
+		if sub.StrVal == "" {
+			return Value{Kind: "number", NumVal: 0}
+		}
+		// rune-aware: len() и s[i] в CodeX считают руны, не байты
+		rs := []rune(s.StrVal)
+		rsub := []rune(sub.StrVal)
+		if len(rsub) > len(rs) {
+			return Value{Kind: "number", NumVal: -1}
+		}
+		for i := 0; i+len(rsub) <= len(rs); i++ {
+			match := true
+			for j := 0; j < len(rsub); j++ {
+				if rs[i+j] != rsub[j] {
+					match = false
+					break
+				}
+			}
+			if match {
+				return Value{Kind: "number", NumVal: float64(i)}
+			}
+		}
+		return Value{Kind: "number", NumVal: -1}
+	}
+
+	if call.Name == "count" {
+		if len(call.Args) != 2 {
+			fail("Runtime error: count() takes exactly 2 arguments (s, sub)\n")
+		}
+		s := interp.eval(call.Args[0], env)
+		sub := interp.eval(call.Args[1], env)
+		if s.Kind != "string" || sub.Kind != "string" {
+			fail("Runtime error: count() needs (string, string)\n")
+		}
+		if sub.StrVal == "" {
+			return Value{Kind: "number", NumVal: 0}
+		}
+		return Value{Kind: "number", NumVal: float64(strings.Count(s.StrVal, sub.StrVal))}
+	}
+
+	if call.Name == "lines" {
+		if len(call.Args) != 1 {
+			fail("Runtime error: lines() takes exactly 1 argument\n")
+		}
+		s := interp.eval(call.Args[0], env)
+		if s.Kind != "string" {
+			fail("Runtime error: lines() needs a string, got %s\n", s.Kind)
+		}
+		normalized := strings.ReplaceAll(s.StrVal, "\r\n", "\n")
+		parts := strings.Split(normalized, "\n")
+		items := make([]Value, 0, len(parts))
+		for _, part := range parts {
+			items = append(items, Value{Kind: "string", StrVal: part})
+		}
+		return Value{Kind: "array", Items: items}
+	}
+
+	if call.Name == "sum" {
+		if len(call.Args) != 1 {
+			fail("Runtime error: sum() takes exactly 1 argument\n")
+		}
+		arr := interp.eval(call.Args[0], env)
+		if arr.Kind != "array" {
+			fail("Runtime error: sum() needs an array, got %s\n", arr.Kind)
+		}
+		total := 0.0
+		for _, item := range arr.Items {
+			if item.Kind != "number" {
+				fail("Runtime error: sum() needs numbers, got %s\n", item.Kind)
+			}
+			total += item.NumVal
+		}
+		return Value{Kind: "number", NumVal: total}
+	}
+
+	if call.Name == "avg" {
+		if len(call.Args) != 1 {
+			fail("Runtime error: avg() takes exactly 1 argument\n")
+		}
+		arr := interp.eval(call.Args[0], env)
+		if arr.Kind != "array" {
+			fail("Runtime error: avg() needs an array, got %s\n", arr.Kind)
+		}
+		if len(arr.Items) == 0 {
+			fail("Runtime error: avg() of empty array\n")
+		}
+		total := 0.0
+		for _, item := range arr.Items {
+			if item.Kind != "number" {
+				fail("Runtime error: avg() needs numbers, got %s\n", item.Kind)
+			}
+			total += item.NumVal
+		}
+		return Value{Kind: "number", NumVal: total / float64(len(arr.Items))}
+	}
+
+	if call.Name == "unique" {
+		if len(call.Args) != 1 {
+			fail("Runtime error: unique() takes exactly 1 argument\n")
+		}
+		arr := interp.eval(call.Args[0], env)
+		if arr.Kind != "array" {
+			fail("Runtime error: unique() needs an array, got %s\n", arr.Kind)
+		}
+		out := make([]Value, 0, len(arr.Items))
+		for _, item := range arr.Items {
+			dup := false
+			for _, seen := range out {
+				if valuesEqual(item, seen) {
+					dup = true
+					break
+				}
+			}
+			if !dup {
+				out = append(out, item)
+			}
+		}
+		return Value{Kind: "array", Items: out}
+	}
+
+	if call.Name == "extend" {
+		if len(call.Args) != 2 {
+			fail("Runtime error: extend() takes exactly 2 arguments (arr, other)\n")
+		}
+		target, ok := call.Args[0].(*Identifier)
+		if !ok {
+			fail("Runtime error: extend() target must be a variable\n")
+		}
+		arr, ok := env.getVar(target.Name)
+		if !ok || arr.Kind != "array" {
+			fail("Runtime error: extend() target '%s' is not an array\n", target.Name)
+		}
+		other := interp.eval(call.Args[1], env)
+		if other.Kind != "array" {
+			fail("Runtime error: extend() needs (array, array)\n")
+		}
+		arr.Items = append(arr.Items, other.Items...)
+		current := env
+		for current != nil {
+			if _, found := current.vars[target.Name]; found {
+				current.vars[target.Name] = arr
+				break
+			}
+			current = current.parent
+		}
+		return arr
+	}
+
+	if call.Name == "choice" {
+		if len(call.Args) != 1 {
+			fail("Runtime error: choice() takes exactly 1 argument\n")
+		}
+		arr := interp.eval(call.Args[0], env)
+		if arr.Kind != "array" {
+			fail("Runtime error: choice() needs an array, got %s\n", arr.Kind)
+		}
+		if len(arr.Items) == 0 {
+			fail("Runtime error: choice() of empty array\n")
+		}
+		return arr.Items[rand.Intn(len(arr.Items))]
+	}
+
+	if call.Name == "shuffle" {
+		if len(call.Args) != 1 {
+			fail("Runtime error: shuffle() takes exactly 1 argument\n")
+		}
+		target, ok := call.Args[0].(*Identifier)
+		if !ok {
+			fail("Runtime error: shuffle() target must be a variable\n")
+		}
+		arr, ok := env.getVar(target.Name)
+		if !ok || arr.Kind != "array" {
+			fail("Runtime error: shuffle() target '%s' is not an array\n", target.Name)
+		}
+		rand.Shuffle(len(arr.Items), func(a, b int) { arr.Items[a], arr.Items[b] = arr.Items[b], arr.Items[a] })
+		current := env
+		for current != nil {
+			if _, found := current.vars[target.Name]; found {
+				current.vars[target.Name] = arr
+				break
+			}
+			current = current.parent
+		}
+		return arr
+	}
+
 	if call.Name == "keys" {
 		if len(call.Args) != 1 {
 			fail("Runtime error: keys() takes exactly 1 argument\n")
@@ -2291,6 +2485,123 @@ func (interp *Interpreter) evalFuncCall(call *FuncCall, env *Environment) (resul
 		}
 		_, ok := m.MapVal[k.StrVal]
 		return Value{Kind: "bool", BoolVal: ok}
+	}
+
+	if call.Name == "values" {
+		if len(call.Args) != 1 {
+			fail("Runtime error: values() takes exactly 1 argument\n")
+		}
+		v := interp.eval(call.Args[0], env)
+		if v.Kind != "map" {
+			fail("Runtime error: values() needs a map, got %s\n", v.Kind)
+		}
+		ks := make([]string, 0, len(v.MapVal))
+		for k := range v.MapVal {
+			ks = append(ks, k)
+		}
+		sort.Strings(ks)
+		items := make([]Value, 0, len(ks))
+		for _, k := range ks {
+			items = append(items, v.MapVal[k])
+		}
+		return Value{Kind: "array", Items: items}
+	}
+
+	if call.Name == "merge" {
+		if len(call.Args) != 2 {
+			fail("Runtime error: merge() takes exactly 2 arguments (m1, m2)\n")
+		}
+		a := interp.eval(call.Args[0], env)
+		b := interp.eval(call.Args[1], env)
+		if a.Kind != "map" || b.Kind != "map" {
+			fail("Runtime error: merge() needs (map, map)\n")
+		}
+		out := make(map[string]Value, len(a.MapVal)+len(b.MapVal))
+		for k, v := range a.MapVal {
+			out[k] = v
+		}
+		for k, v := range b.MapVal {
+			out[k] = v
+		}
+		return Value{Kind: "map", MapVal: out}
+	}
+
+	if call.Name == "delete_key" {
+		if len(call.Args) != 2 {
+			fail("Runtime error: delete_key() takes exactly 2 arguments (m, key)\n")
+		}
+		target, ok := call.Args[0].(*Identifier)
+		if !ok {
+			fail("Runtime error: delete_key() target must be a variable\n")
+		}
+		m, ok := env.getVar(target.Name)
+		if !ok || m.Kind != "map" {
+			fail("Runtime error: delete_key() target '%s' is not a map\n", target.Name)
+		}
+		key := interp.eval(call.Args[1], env)
+		if key.Kind != "string" {
+			fail("Runtime error: delete_key() needs (map, string)\n")
+		}
+		_, existed := m.MapVal[key.StrVal]
+		delete(m.MapVal, key.StrVal)
+		current := env
+		for current != nil {
+			if _, found := current.vars[target.Name]; found {
+				current.vars[target.Name] = m
+				break
+			}
+			current = current.parent
+		}
+		return Value{Kind: "bool", BoolVal: existed}
+	}
+
+	if call.Name == "is_nil" || call.Name == "is_array" || call.Name == "is_map" || call.Name == "is_string" || call.Name == "is_num" {
+		if len(call.Args) != 1 {
+			fail("Runtime error: %s() takes exactly 1 argument\n", call.Name)
+		}
+		v := interp.eval(call.Args[0], env)
+		switch call.Name {
+		case "is_nil":
+			return Value{Kind: "bool", BoolVal: v.Kind == "nil"}
+		case "is_array":
+			return Value{Kind: "bool", BoolVal: v.Kind == "array"}
+		case "is_map":
+			return Value{Kind: "bool", BoolVal: v.Kind == "map"}
+		case "is_string":
+			return Value{Kind: "bool", BoolVal: v.Kind == "string"}
+		case "is_num":
+			return Value{Kind: "bool", BoolVal: v.Kind == "number"}
+		}
+	}
+
+	if call.Name == "chr" {
+		if len(call.Args) != 1 {
+			fail("Runtime error: chr() takes exactly 1 argument\n")
+		}
+		v := interp.eval(call.Args[0], env)
+		if v.Kind != "number" {
+			fail("Runtime error: chr() needs a number, got %s\n", v.Kind)
+		}
+		n := int(v.NumVal)
+		if n < 0 || n > 0x10FFFF {
+			fail("Runtime error: chr() code out of range\n")
+		}
+		return Value{Kind: "string", StrVal: string(rune(n))}
+	}
+
+	if call.Name == "ord" {
+		if len(call.Args) != 1 {
+			fail("Runtime error: ord() takes exactly 1 argument\n")
+		}
+		v := interp.eval(call.Args[0], env)
+		if v.Kind != "string" {
+			fail("Runtime error: ord() needs a string, got %s\n", v.Kind)
+		}
+		rs := []rune(v.StrVal)
+		if len(rs) == 0 {
+			fail("Runtime error: ord() of empty string\n")
+		}
+		return Value{Kind: "number", NumVal: float64(rs[0])}
 	}
 
 	if call.Name == "sort" {
@@ -2865,6 +3176,117 @@ func (interp *Interpreter) evalFuncCall(call *FuncCall, env *Environment) (resul
 			return Value{Kind: "nil"}
 		}
 		return Value{Kind: "array", Items: out}
+	}
+
+	if call.Name == "reduce" {
+		if len(call.Args) != 3 {
+			fail("Runtime error: reduce() takes exactly 3 arguments (array, function, init)\n")
+		}
+		arr := interp.eval(call.Args[0], env)
+		fnVal := interp.eval(call.Args[1], env)
+		if arr.Kind != "array" {
+			fail("Runtime error: reduce() needs an array, got %s\n", arr.Kind)
+		}
+		if fnVal.Kind != "func" {
+			fail("Runtime error: reduce() needs a function, got %s\n", fnVal.Kind)
+		}
+		closure := fnVal.Closure
+		if closure == nil {
+			closure = interp.globalEnv
+		}
+		acc := interp.eval(call.Args[2], env)
+		for _, item := range arr.Items {
+			acc = interp.invokeUserFunc(fnVal.Fn, closure, []Value{acc, item}, "reduce")
+		}
+		return acc
+	}
+
+	if call.Name == "find" {
+		if len(call.Args) != 2 {
+			fail("Runtime error: find() takes exactly 2 arguments (array, function)\n")
+		}
+		arr := interp.eval(call.Args[0], env)
+		fnVal := interp.eval(call.Args[1], env)
+		if arr.Kind != "array" {
+			fail("Runtime error: find() needs an array, got %s\n", arr.Kind)
+		}
+		if fnVal.Kind != "func" {
+			fail("Runtime error: find() needs a function, got %s\n", fnVal.Kind)
+		}
+		closure := fnVal.Closure
+		if closure == nil {
+			closure = interp.globalEnv
+		}
+		for _, item := range arr.Items {
+			if isTruthy(interp.invokeUserFunc(fnVal.Fn, closure, []Value{item}, "find")) {
+				return item
+			}
+		}
+		return Value{Kind: "nil"}
+	}
+
+	if call.Name == "any" || call.Name == "all" {
+		if len(call.Args) != 2 {
+			fail("Runtime error: %s() takes exactly 2 arguments (array, function)\n", call.Name)
+		}
+		arr := interp.eval(call.Args[0], env)
+		fnVal := interp.eval(call.Args[1], env)
+		if arr.Kind != "array" {
+			fail("Runtime error: %s() needs an array, got %s\n", call.Name, arr.Kind)
+		}
+		if fnVal.Kind != "func" {
+			fail("Runtime error: %s() needs a function, got %s\n", call.Name, fnVal.Kind)
+		}
+		closure := fnVal.Closure
+		if closure == nil {
+			closure = interp.globalEnv
+		}
+		for _, item := range arr.Items {
+			truth := isTruthy(interp.invokeUserFunc(fnVal.Fn, closure, []Value{item}, call.Name))
+			if call.Name == "any" && truth {
+				return Value{Kind: "bool", BoolVal: true}
+			}
+			if call.Name == "all" && !truth {
+				return Value{Kind: "bool", BoolVal: false}
+			}
+		}
+		if call.Name == "any" {
+			return Value{Kind: "bool", BoolVal: false}
+		}
+		return Value{Kind: "bool", BoolVal: true}
+	}
+
+	if call.Name == "cwd" {
+		if len(call.Args) != 0 {
+			fail("Runtime error: cwd() takes no arguments\n")
+		}
+		dir, err := os.Getwd()
+		if err != nil {
+			fail("Runtime error: cwd() failed: %v\n", err)
+		}
+		return Value{Kind: "string", StrVal: dir}
+	}
+
+	if call.Name == "is_dir" {
+		if len(call.Args) != 1 {
+			fail("Runtime error: is_dir() takes exactly 1 argument\n")
+		}
+		path := interp.eval(call.Args[0], env)
+		if path.Kind != "string" {
+			fail("Runtime error: is_dir() needs a string path, got %s\n", path.Kind)
+		}
+		info, err := os.Stat(path.StrVal)
+		if err != nil {
+			return Value{Kind: "bool", BoolVal: false}
+		}
+		return Value{Kind: "bool", BoolVal: info.IsDir()}
+	}
+
+	if call.Name == "clock" {
+		if len(call.Args) != 0 {
+			fail("Runtime error: clock() takes no arguments\n")
+		}
+		return Value{Kind: "number", NumVal: float64(time.Now().UnixMilli())}
 	}
 
 	if call.Name == "run" {

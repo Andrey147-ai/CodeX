@@ -28,6 +28,10 @@ Suggested `tasks.json`:
 }
 ```
 
-## 3. New builtins (v0.22 wave 2)
+## 3. New builtins (v0.22 wave 2+3)
 
-`pop(arr)`, `reverse(arr)`, `file_size(path)`, `http_post(url, body)`.
+`pop`, `reverse`, `shuffle`, `choice`, `extend`, `unique`, `sum`, `avg`,
+`file_size`, `is_dir`, `cwd`, `clock`, `http_post`,
+`index_of`, `count`, `lines`, `values`, `merge`, `delete_key`,
+`is_nil/is_array/is_map/is_string/is_num`, `chr/ord`,
+`reduce/find/any/all`. Demo: `examples/funcs_demo.cx`.

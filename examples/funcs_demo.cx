@@ -1,0 +1,29 @@
+// Funcs demo: Python-like power in 30 lines.
+// Run: ..\codex.exe funcs_demo.cx
+words := lines("first\nsecond\nthird")
+print("lines: ", len(words))
+scores := [5, 3, 5, 2, 3]
+print("sum=", sum(scores), " avg=", avg(scores))
+print("unique=", unique(scores))
+deck := [1, 2, 3, 4, 5]
+shuffle(deck)
+print("shuffled=", deck, " drawn=", choice(deck))
+users := {"ann": 90, "bob": 70}
+print("names=", keys(users), " scores=", values(users))
+all_scores := merge(users, {"cat": 100})
+print("merged=", all_scores)
+delete_key(all_scores, "bob")
+print("after delete=", all_scores)
+print("chr(65)=", chr(65), " ord(A)=", ord("A"))
+print("cwd=", cwd(), " is_dir=", is_dir("."))
+print("clock_ms=", clock())
+fn big(x) {
+    return x > 3
+}
+print("find>3=", find(scores, big))
+print("any>3=", any(scores, big), " all>3=", all(scores, big))
+fn add(a, b) {
+    return a + b
+}
+print("reduce sum=", reduce(scores, add, 0))
+print("index_of=", index_of("hello", "ll"), " count=", count("aaa", "a"))
