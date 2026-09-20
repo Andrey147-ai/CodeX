@@ -9,6 +9,5 @@ fn hello(req) {
     }
     return {"status": 404, "body": "try /hi or POST /echo"}
 }
-
 print("serving on 127.0.0.1:8080")
 http_listen(8080, hello)

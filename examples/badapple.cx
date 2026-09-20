@@ -11,7 +11,6 @@
 //
 // Usage: codex.exe badapple.cx [first] [last] [fps]
 //   default: frames 1..200 at 10 fps
-
 fn frameName(i) {
     s := str(num(i))
     if len(s) == 1 {
@@ -25,10 +24,8 @@ fn frameName(i) {
     }
     return "out" + s + ".jpg.txt"
 }
-
 print("fetching frames (first run downloads the frames repo once)...")
 base := pkgdir("trung-kieen/bad-apple-ascii") + "/frames-ascii/"
-
 first := 1
 last := 200
 fps := 10
@@ -42,7 +39,6 @@ if len(args()) > 2 {
     fps = num(args()[2])
 }
 ms := 1000 / fps
-
 i := first
 while i <= last {
     f := base + frameName(i)

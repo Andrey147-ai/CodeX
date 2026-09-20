@@ -2,14 +2,11 @@
 inv := ["sword", "potion"]
 print(inv)
 print(len(inv))
-
 push(inv, "shield")
 print(inv)
-
 inv[0] = "axe"
 print(inv[0])
 print(inv)
-
 total := 0
 prices := [100, 50, 75]
 for i := 0; i < len(prices); i = i + 1 {

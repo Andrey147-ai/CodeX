@@ -3,15 +3,12 @@ struct Boss {
     hp
     shield
 }
-
 // Boss soaks damage with his shield first, then takes hp hits.
-b := Boss{777, 1000, 300}
+b := Boss {777, 1000, 300}
 print("Boss spawned, shields: ", b.shield)
-
 // every enemy is [id, hp]
 enemies := [[0, 60], [1, 80], [2, 100]]
 print("waves: ", len(enemies))
-
 round := 0
 alive := len(enemies)
 while alive > 0 {
@@ -27,7 +24,6 @@ while alive > 0 {
     }
     print("round ", round, " alive ", alive)
 }
-
 b.hp = b.hp + b.shield - 500
 b.shield = 0
 print("boss hp: ", b.hp)

@@ -2,7 +2,6 @@
 fn double(x) {
     return x * 2
 }
-
 fn shout(s) {
     return upper(s) + "!"
 }

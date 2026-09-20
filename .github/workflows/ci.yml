@@ -26,6 +26,10 @@ jobs:
       - name: Build
         run: go build -o codex${{ runner.os == 'Windows' && '.exe' || '' }} .
 
+      - name: Go tests
+        shell: bash
+        run: go test ./...
+
       - name: Smoke test examples
         shell: bash
         run: |

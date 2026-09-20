@@ -2,6 +2,5 @@
 // Run from the examples dir: ..\codex.exe useimport.cx
 import "./mylib.cx"
 // import "Andrey147-ai/CodeX@v0.8.1/examples/inventory.cx"
-
 print(double(21))
 print(shout("codex packages"))

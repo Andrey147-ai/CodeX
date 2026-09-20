@@ -3,25 +3,20 @@ struct Player {
     gold
     hp
 }
-
 fn (p Player) takeDamage(amount) {
     p.hp = p.hp - amount
     return p.hp
 }
-
 fn (p Player) heal(amount) {
     p.hp = p.hp + amount
     return p.hp
 }
-
 fn (p Player) status() {
     print(p.name, " | gold=", p.gold, " hp=", p.hp)
 }
-
 print("=== DUNGEON SHOP ===")
 name := input("your name? ")
-p := Player{name, 100, 100}
-
+p := Player {name, 100, 100}
 // digits-only check so bad input never crashes num()
 fn isNumber(s) {
     if len(s) == 0 {
@@ -42,11 +37,9 @@ fn isNumber(s) {
     }
     return true
 }
-
 shop := ["sword:50", "potion:30", "shield:40"]
 inv := []
 potions := 0
-
 while true {
     print("--- shop ---")
     for i := 0; i < len(shop); i = i + 1 {
@@ -81,14 +74,12 @@ while true {
         }
     }
 }
-
 print("--- inventory: ", join(inv, ", "))
 dmg := 20
 if contains(join(inv, ","), "sword") {
     dmg = dmg + 15
     print("sword equipped! dmg=", dmg)
 }
-
 print("=== BOSS FIGHT ===")
 boss := 120
 round := 0
@@ -105,14 +96,12 @@ while p.hp > 0 && boss > 0 {
         }
     }
 }
-
 if boss <= 0 {
     print("VICTORY in ", round, " rounds!")
     p.gold = p.gold + 100
 } else {
     print("DEFEAT...")
 }
-
 p.status()
 write_file("save.txt", p.name + "|" + str(p.gold) + "|" + str(p.hp))
 print("saved: ", read_file("save.txt"))

@@ -6,11 +6,9 @@ if len(args()) > 0 {
 }
 log := read_file(file)
 lines := split(log, "\n")
-
 total := 0
 levels := {}
 errs := {}
-
 for line in lines {
     if len(line) == 0 {
         continue
@@ -41,7 +39,6 @@ for line in lines {
         }
     }
 }
-
 print("file: ", file)
 print("total: ", total)
 print("levels: ", levels)
@@ -49,7 +46,6 @@ print("--- unique errors ---")
 for k in keys(errs) {
     print(errs[k], "x ", k)
 }
-
 report := "log report: " + file + "\n"
 report = report + "total: " + str(total) + "\n"
 for k in keys(levels) {

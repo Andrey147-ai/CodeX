@@ -4,7 +4,6 @@
 //   codex.exe todo.cx list
 //   codex.exe todo.cx done 1
 file := "todo.txt"
-
 fn load() {
     if !exists(file) {
         return []
@@ -17,11 +16,9 @@ fn load() {
     }
     return items
 }
-
 fn save(items) {
     write_file(file, join(items, "\n") + "\n")
 }
-
 if len(args()) == 0 {
     print("usage: add/list/done")
 } else if args()[0] == "add" {

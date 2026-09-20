@@ -3,15 +3,13 @@ assert(2 + 3 * 4 == 14, "precedence")
 assert((2 + 3) * 4 == 20)
 assert(7 % 3 == 1)
 assert(7 div 2 == 3)
-assert("hello"[1:4] == "ell")
-
+assert("hello"[1: 4] == "ell")
 fn add(a, b) {
     return a + b
 }
 assert(add(2, 3) == 5)
-
 fn makeAdder(n) {
-    return fn(x) { return x + n }
+    return fn (x) {return x + n}
 }
 add5 := makeAdder(5)
 assert(add5(100) == 105)
