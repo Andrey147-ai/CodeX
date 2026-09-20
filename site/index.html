@@ -1,16 +1,16 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="description" content="CodeX — легкий язык программирования: один exe, игры, файлы, JSON, HTTP.">
-<meta property="og:title" content="CodeX — лёгкий язык программирования">
-<meta property="og:description" content="Первая игра через 15 минут, бэкенд через 10 строк. Один exe, ноль зависимостей.">
+<meta name="description" content="CodeX — a lightweight programming language: one exe, games, files, JSON, HTTP.">
+<meta property="og:title" content="CodeX — a lightweight programming language">
+<meta property="og:description" content="First game in 15 minutes, backend in 10 lines. One exe, zero dependencies.">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://andrey147-ai.github.io/CodeX/">
 <meta property="og:image" content="https://andrey147-ai.github.io/CodeX/logo.svg">
 <meta name="twitter:card" content="summary">
-<title>CodeX — лёгкий язык программирования</title>
+<title>CodeX — a lightweight programming language</title>
 <link rel="icon" type="image/svg+xml" href="logo.svg">
 <link rel="stylesheet" href="style.css">
 </head>
@@ -19,10 +19,10 @@
   <div class="wrap nav-in">
     <span class="logo">CodeX <small>v0.23</small></span>
     <nav>
-      <a href="#start">Старт</a>
-      <a href="#examples">Примеры</a>
-      <a href="#stdlib">Функции</a>
-      <a href="#docs">Уроки</a>
+      <a href="#start">Start</a>
+      <a href="#examples">Examples</a>
+      <a href="#stdlib">Functions</a>
+      <a href="#docs">Learn</a>
       <a href="https://github.com/Andrey147-ai/CodeX">GitHub</a>
     </nav>
   </div>
@@ -30,11 +30,11 @@
 
 <section class="hero">
   <div class="wrap">
-    <h1>Язык, который запускается за 15 минут</h1>
-    <p>Один <code>codex.exe</code>, ноль зависимостей. Переменные, игры, файлы, JSON, HTTP-сервер — без фреймворков.</p>
+    <h1>A language running in 15 minutes</h1>
+    <p>One <code>codex.exe</code>, zero dependencies. Variables, games, files, JSON, HTTP server — no frameworks.</p>
     <div class="btns">
-      <a class="btn primary" href="https://github.com/Andrey147-ai/CodeX/releases">Скачать codex.exe</a>
-      <a class="btn" href="#start">Быстрый старт</a>
+      <a class="btn primary" href="https://github.com/Andrey147-ai/CodeX/releases">Download codex.exe</a>
+      <a class="btn" href="#start">Quickstart</a>
     </div>
     <pre class="code"><code>codex.exe new hello.cx
 codex.exe hello.cx</code></pre>
@@ -42,33 +42,33 @@ codex.exe hello.cx</code></pre>
 </section>
 
 <section id="start" class="wrap">
-  <h2>Старт за 3 команды</h2>
-  <pre class="code"><code>codex.exe new hello.cx   # шаблон новичка
-codex.exe hello.cx       # запуск
-codex.exe test tests     # тесты с assert()</code></pre>
+  <h2>Start in 3 commands</h2>
+  <pre class="code"><code>codex.exe new hello.cx   # beginner template
+codex.exe hello.cx       # run it
+codex.exe test tests     # assert() tests</code></pre>
   <pre class="code"><code>// hello.cx
-name := input("Как тебя зовут? ")
-print("Привет, " + name + "!")
+name := input("Your name? ")
+print("Hi, " + name + "!")
 scores := [90, 80, 100]
 total := sum(scores)
-print("Средний балл: ", total / len(scores))</code></pre>
+print("Average: ", total / len(scores))</code></pre>
 </section>
 
 <section id="examples" class="wrap">
-  <h2>Примеры</h2>
+  <h2>Examples</h2>
   <div class="tabs">
-    <button data-tab="guess" class="active">Игра</button>
-    <button data-tab="api">Бэкенд</button>
-    <button data-tab="funcs">Функции</button>
+    <button data-tab="guess" class="active">Game</button>
+    <button data-tab="api">Backend</button>
+    <button data-tab="funcs">Functions</button>
   </div>
   <pre class="code" id="tab-guess"><code>secret := randint(1, 100)
 tries := 0
 while true {
-    guess := num(input("Твой вариант: "))
+    guess := num(input("Your guess: "))
     tries += 1
-    if guess == secret { print("Точно за ", tries); break }
-    else if guess < secret { print("Бери больше") }
-    else { print("Бери меньше") }
+    if guess == secret { print("Nailed it in ", tries); break }
+    else if guess < secret { print("Go higher") }
+    else { print("Go lower") }
 }</code></pre>
   <pre class="code hidden" id="tab-api"><code>fn hello(req) {
     if req["path"] == "/hi" {
@@ -82,32 +82,32 @@ print(sum(scores), avg(scores), unique(scores))
 print(reduce(scores, add, 0))
 print(find(scores, big), any(scores, big), all(scores, big))
 print(chr(65), ord("A"), cwd(), clock())</code></pre>
-  <p class="muted">Все файлы лежат в <code>examples/</code>: <code>guess.cx</code>, <code>mini_api.cx</code>, <code>todo_api.cx</code>, <code>chat.cx</code>, <code>funcs_demo.cx</code>.</p>
+  <p class="muted">All files live in <code>examples/</code>: <code>guess.cx</code>, <code>mini_api.cx</code>, <code>todo_api.cx</code>, <code>chat.cx</code>, <code>funcs_demo.cx</code>.</p>
 </section>
 
 <section id="stdlib" class="wrap">
-  <h2>~76 функций из коробки</h2>
+  <h2>~86 functions out of the box</h2>
   <div class="grid">
-    <div><b>Массивы</b><br>push pop sort reverse shuffle choice extend unique sum avg range map filter each reduce find any all len</div>
-    <div><b>Строки</b><br>upper lower contains index_of count lines split join replace trim repeat starts_with ends_with</div>
-    <div><b>Мапы</b><br>keys values has merge delete_key</div>
-    <div><b>Файлы</b><br>read_file write_file append_file exists file_size is_dir cwd ls mkdir remove rename</div>
-    <div><b>Сеть</b><br>http_get http_post http_listen</div>
-    <div><b>Система</b><br>input args run sleep clock now date env exit type str num chr ord</div>
+    <div><b>Arrays</b><br>push pop sort sorted reverse shuffle choice extend unique sum avg clamp zip range map filter each reduce find any all len</div>
+    <div><b>Strings</b><br>upper lower contains index_of count lines split join replace trim trim_prefix trim_suffix pad_left pad_right repeat starts_with ends_with</div>
+    <div><b>Maps</b><br>keys values has merge delete_key</div>
+    <div><b>Files</b><br>read_file write_file append_file copy_file exists file_size is_dir cwd basename join_path ls mkdir remove rename</div>
+    <div><b>Network</b><br>http_get http_post http_listen</div>
+    <div><b>System</b><br>input args run sleep clock now date env exit type str num chr ord is_nil is_array is_map is_string is_num</div>
   </div>
-  <p class="muted">Полная таблица — в <code>README.md</code>. Типы: числа, строки, bool, массивы, мапы, структуры, nil, функции.</p>
+  <p class="muted">Full table in <code>README.md</code>. Types: numbers, strings, bools, arrays, maps, structs, nil, functions.</p>
 </section>
 
 <section id="docs" class="wrap">
-  <h2>Уроки и редактор</h2>
+  <h2>Learn &amp; editor</h2>
   <ul>
-    <li>Туториалы <code>docs/tutorial-01…11</code>: basics → data → strings → files → functions → loops → maps → errors → packages → capstone → <b>backend</b>.</li>
-    <li>VS Code: папка <code>editors/vscode</code> — подсветка, сниппеты, <code>codex fmt</code>, <code>fmt --check</code> для CI.</li>
-    <li>Пакеты с GitHub без реестра: <code>import "user/repo@ver"</code>, кэш <code>~/.codex/pkgs</code>.</li>
+    <li>Tutorials <code>docs/tutorial-01…11</code>: basics → data → strings → files → functions → loops → maps → errors → packages → capstone → <b>backend</b>.</li>
+    <li>VS Code: <code>editors/vscode</code> folder — highlighting, snippets, <code>codex fmt</code>, <code>fmt --check</code> for CI.</li>
+    <li>Packages straight from GitHub, no registry: <code>import "user/repo@ver"</code>, cache in <code>~/.codex/pkgs</code>. Browse with <code>codex list</code>.</li>
   </ul>
-  <pre class="code"><code>codex.exe help              # справка
-codex.exe fmt --check a.cx  # проверка формата
-codex.exe get user/repo     # скачать пакет</code></pre>
+  <pre class="code"><code>codex.exe help              # help
+codex.exe fmt --check a.cx  # format check
+codex.exe get user/repo     # fetch a package</code></pre>
 </section>
 
 <footer>

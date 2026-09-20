@@ -20,7 +20,7 @@ codex.exe hello.cx
 
 You should see `hello, CodeX`.
 
-**If you get `Ошибка чтения hello.cx: ... cannot find the path`** — don't
+**If you get `Cannot read hello.cx: ... cannot find the path`** — don't
 panic, that's not a language bug. It's the interpreter saying "file not
 found". Usually one of three things: you're in the wrong folder (check
 with `cd`), a typo in the name (`hello.cx`, not `helo.cx`), or the file

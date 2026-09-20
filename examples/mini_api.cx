@@ -1,5 +1,5 @@
-// Мини-бэкенд за 10 строк: JSON API без фреймворков.
-// Запуск: ..\codex.exe mini_api.cx  →  http://127.0.0.1:8081/hi
+// Mini-backend in 10 lines: JSON API, no frameworks.
+// Run: ..\codex.exe mini_api.cx  →  http://127.0.0.1:8081/hi
 fn hello(req) {
     if req["path"] == "/hi" {
         return to_json({"hi": "there", "time": date()})

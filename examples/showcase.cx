@@ -1,12 +1,10 @@
-// Журнал оценок: структуры, методы, массивы, словарь, файлы.
-
-// Структура: ученик с именем и массивом баллов.
+// Grade book: structs, methods, arrays, maps, files.
+// Struct: a student with a name and score list.
 struct Student {
     name
     scores
 }
-
-// Метод: средний балл (сумма через for-in, делённая на количество).
+// Method: average score (for-in sum divided by count).
 fn (s Student) avg() {
     total := 0
     for x in s.scores {
@@ -14,8 +12,7 @@ fn (s Student) avg() {
     }
     return total / len(s.scores)
 }
-
-// Функция: перевод среднего балла в буквенную оценку.
+// Function: average score to letter grade.
 fn grade(a) {
     if a >= 90 {
         return "A"
@@ -27,29 +24,25 @@ fn grade(a) {
         return "F"
     }
 }
-
-// Группа: массив структур (внутри каждой — свой массив баллов).
-group := [Student{"Ann", [90, 85, 95]}, Student{"Bob", [70, 60, 80]}, Student{"Cat", [100, 95, 90]}]
-
-// Словарь-отчёт: имя -> оценка. best/bestAvg — лучший ученик.
+// Group: array of structs (each with its own score list).
+group := [Student {"Ann", [90, 85, 95]}, Student {"Bob", [70, 60, 80]}, Student {"Cat", [100, 95, 90]}]
+// Report map: name -> grade. best/bestAvg track the top student.
 best := ""
 bestAvg := 0
 report := {}
 for s in group {
-    a := s.avg()          // вызов метода структуры
-    g := grade(a)         // вызов обычной функции
+    a := s.avg() // struct method call
+    g := grade(a) // plain function call
     print(s.name, " avg=", a, " grade=", g)
-    report[s.name] = g    // запись в словарь по ключу
+    report[s.name] = g // map write by key
     if a > bestAvg {
         bestAvg = a
         best = s.name
     }
 }
-
-// Итоги: лучший ученик и весь словарь целиком.
+// Totals: top student and the whole map.
 print("best: ", best, " (", bestAvg, ")")
 print(report)
-
-// Сохранение: ключи словаря в строку через запятую -> в файл -> проверка чтением.
+// Save: map keys joined by comma -> file -> verify by reading.
 write_file("grades.txt", join(keys(report), ","))
 print("saved: ", read_file("grades.txt"))

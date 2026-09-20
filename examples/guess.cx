@@ -1,17 +1,17 @@
-// Угадай число за 20 строк — первая игра новичка.
-// Запуск: ..\codex.exe guess.cx
+// Guess the number in 20 lines — a beginner's first game.
+// Run: ..\codex.exe guess.cx
 secret := randint(1, 100)
 tries := 0
-print("Я загадал число 1..100. Справишься?")
+print("I picked 1..100. Can you guess it?")
 while true {
-    guess := num(input("Твой вариант: "))
+    guess := num(input("Your try: "))
     tries += 1
     if guess == secret {
-        print("Точно! Это " + str(secret) + " за " + str(tries) + " попыток")
+        print("Nailed it! " + str(secret) + " in " + str(tries) + " tries")
         break
     } else if guess < secret {
-        print("Бери больше")
+        print("Go higher")
     } else {
-        print("Бери меньше")
+        print("Go lower")
     }
 }
