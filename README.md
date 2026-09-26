@@ -310,7 +310,9 @@ Rules:
 In `examples/`: `raid.cx` and `shop_game.cx` (games), `inventory.cx`,
 `logstat.cx` (log analyzer, try `..\codex.exe logstat.cx app.log`),
 `methods.cx`, `stdlib.cx`, `showcase.cx`, `useimport.cx`, `badapple.cx`,
-`server.cx` (web server, try `..\codex.exe server.cx`).
+`server.cx` (web server, try `..\codex.exe server.cx`),
+`auto_api.cx` (auto-API, try `..\codex.exe serve auto_api.cx 8091`
+then `GET /add?a=2&b=3`).
 Everyday tools: `organize.cx` (sort files by extension), `todo.cx`
 (add/list/done), `backup.cx` (flat copy), `passgen.cx` (passwords).
 First-evening viral trio: `guess.cx` (guess-the-number game),

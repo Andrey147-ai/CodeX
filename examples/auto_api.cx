@@ -1,0 +1,9 @@
+// Auto-API demo: every function becomes an endpoint.
+// Run: ..\codex.exe serve auto_api.cx 8091
+// Try: /add?a=2&b=3  /hi?name=Ann  /  (function list)
+fn add(a, b) {
+    return a + b
+}
+fn hi(name) {
+    return "hi, " + name
+}
