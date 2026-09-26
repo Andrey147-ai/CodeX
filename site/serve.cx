@@ -1,12 +1,33 @@
-// Site preview on CodeX itself: serves site/ over HTTP.
+// Site preview on CodeX itself: serves site/ over HTTP with real types.
 // Run from repo root: ..\codex.exe site\serve.cx → http://127.0.0.1:8090/
+fn ctype_for(path) {
+    if ends_with(path, ".html") {
+        return "text/html; charset=utf-8"
+    }
+    if ends_with(path, ".css") {
+        return "text/css; charset=utf-8"
+    }
+    if ends_with(path, ".js") {
+        return "text/javascript; charset=utf-8"
+    }
+    if ends_with(path, ".svg") {
+        return "image/svg+xml"
+    }
+    if ends_with(path, ".json") {
+        return "application/json"
+    }
+    return "text/plain; charset=utf-8"
+}
 fn site(req) {
     path := req["path"]
     if path == "/" {
         path = "/index.html"
     }
-    body := read_file("site" + path)
-    return {"status": 200, "body": body}
+    file := "site" + path
+    if !exists(file) {
+        return {"status": 404, "body": "not found: " + path}
+    }
+    return {"status": 200, "body": read_file(file), "content_type": ctype_for(path)}
 }
 print("site on 127.0.0.1:8090")
 http_listen(8090, site)

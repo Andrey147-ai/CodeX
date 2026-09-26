@@ -2772,6 +2772,7 @@ func (interp *Interpreter) evalFuncCall(call *FuncCall, env *Environment) (resul
 			res := interp.invokeUserFunc(fnDef, closure, []Value{reqVal}, "http-handler")
 			status := 200
 			out := ""
+			ctype := "text/plain; charset=utf-8"
 			if res.Kind == "string" {
 				out = res.StrVal
 			} else if res.Kind == "map" {
@@ -2781,10 +2782,13 @@ func (interp *Interpreter) evalFuncCall(call *FuncCall, env *Environment) (resul
 				if b, ok := res.MapVal["body"]; ok {
 					out = valueToString(b)
 				}
+				if ct, ok := res.MapVal["content_type"]; ok && ct.Kind == "string" && ct.StrVal != "" {
+					ctype = ct.StrVal
+				}
 			} else if res.Kind != "nil" {
 				out = valueToString(res)
 			}
-			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+			w.Header().Set("Content-Type", ctype)
 			w.WriteHeader(status)
 			w.Write([]byte(out))
 		})

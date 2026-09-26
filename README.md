@@ -234,6 +234,7 @@ import "Andrey147-ai/strutils@v1.2.0"
 | `http_get(url)` | Fetch URL body | `http_get("https://example.com")` |
 | `http_post(url, body)` | POST text body, returns response | `http_post(url, "hi")` |
 | `http_listen(port, fn)` | Serve HTTP, handler gets map | `http_listen(8080, hello)` |
+| `content_type` in handler result | Set response MIME type | `{"body": b, "content_type": "text/html"}` |
 | `sleep(ms)` | Millisecond pause | `sleep(50)` |
 | `pkgdir(spec)` | Local path of a GitHub repo | `pkgdir("user/data")` |
 | `type(x)` | Runtime type name | `type([1])` → `"array"` |
